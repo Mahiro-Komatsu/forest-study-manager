@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   Calendar as CalendarIcon,
   Layers,
-  Cloud,
+  Settings,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { StudyTask, DailyLog, TimerState, StudyScheduleEvent } from '@/types/study';
@@ -30,6 +30,9 @@ import {
   saveActiveTaskId,
   loadSyncCodeFromStorage,
   saveSyncCodeToStorage,
+  INITIAL_TASKS,
+  INITIAL_LOGS,
+  INITIAL_EVENTS,
   calculateTodayProgress,
   getUnitLabel,
   getTodayDateString,
@@ -41,7 +44,7 @@ import { TaskSelectModal } from './TaskSelectModal';
 import { TaskCreateModal } from './TaskCreateModal';
 import { TaskListModal } from './TaskListModal';
 import { QuickAddModal } from './QuickAddModal';
-import { SyncModal } from './SyncModal';
+import { SettingsModal } from './SettingsModal';
 import { CalendarModal } from './CalendarModal';
 
 export const StudyDashboard: React.FC = () => {
@@ -60,7 +63,7 @@ export const StudyDashboard: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
 
   // タイマー状態 (デフォルト: 25分 = 1500秒)
@@ -342,6 +345,36 @@ export const StudyDashboard: React.FC = () => {
     );
   };
 
+  // 全データ初期化リセット
+  const handleResetAllData = () => {
+    setTasks(INITIAL_TASKS);
+    setLogs(INITIAL_LOGS);
+    setEvents(INITIAL_EVENTS);
+    setActiveTaskId(INITIAL_TASKS[0]?.id || '');
+    saveTasksToStorage(INITIAL_TASKS);
+    saveLogsToStorage(INITIAL_LOGS);
+    saveEventsToStorage(INITIAL_EVENTS);
+    saveActiveTaskId(INITIAL_TASKS[0]?.id || '');
+  };
+
+  // データインポート復元
+  const handleImportData = (importedData: { tasks: StudyTask[]; logs: DailyLog[]; events: StudyScheduleEvent[] }) => {
+    if (importedData.tasks && importedData.tasks.length > 0) {
+      setTasks(importedData.tasks);
+      saveTasksToStorage(importedData.tasks);
+      setActiveTaskId(importedData.tasks[0].id);
+      saveActiveTaskId(importedData.tasks[0].id);
+    }
+    if (importedData.logs) {
+      setLogs(importedData.logs);
+      saveLogsToStorage(importedData.logs);
+    }
+    if (importedData.events) {
+      setEvents(importedData.events);
+      saveEventsToStorage(importedData.events);
+    }
+  };
+
   // タイマー操作
   const startTimer = () => {
     setTimerState((prev) => ({
@@ -433,7 +466,7 @@ export const StudyDashboard: React.FC = () => {
           1. Top Header（上部スロット領域）
          ========================================================================= */}
       <header className="relative z-10 w-full max-w-md mx-auto pt-5 px-4 flex items-center justify-between">
-        {/* 左上アイコン群: 全体計画 / カレンダー / クラウド同期 */}
+        {/* 左上アイコン群: 全体計画 / カレンダー / 設定(クラウド等) */}
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => setIsListModalOpen(true)}
@@ -455,13 +488,13 @@ export const StudyDashboard: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setIsSyncModalOpen(true)}
+            onClick={() => setIsSettingsModalOpen(true)}
             className={`p-2.5 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md flex items-center gap-1 text-xs font-semibold ${
               isSyncing ? 'text-emerald-400' : 'text-slate-300 hover:text-emerald-300'
             }`}
-            title="端末間クラウド同期"
+            title="設定・クラウド管理"
           >
-            <Cloud className={`w-4 h-4 sm:w-5 sm:h-5 ${isSyncing ? 'animate-pulse text-emerald-400' : ''}`} />
+            <Settings className={`w-4 h-4 sm:w-5 sm:h-5 ${isSyncing ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
         </div>
 
@@ -625,13 +658,18 @@ export const StudyDashboard: React.FC = () => {
         onAddProgress={handleAddProgress}
       />
 
-      <SyncModal
-        isOpen={isSyncModalOpen}
-        onClose={() => setIsSyncModalOpen(false)}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
         syncCode={syncCode}
         onApplyNewSyncCode={handleApplyNewSyncCode}
         onForceCloudSync={handleForceCloudSync}
         isSyncing={isSyncing}
+        tasks={tasks}
+        logs={logs}
+        events={events}
+        onResetAllData={handleResetAllData}
+        onImportData={handleImportData}
       />
 
       <CalendarModal
