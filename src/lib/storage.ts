@@ -1,10 +1,10 @@
 import { StudyTask, DailyLog, TaskDayProgress } from '@/types/study';
 
 export const STORAGE_KEYS = {
-  TASKS: 'forest_study_tasks_v1',
-  LOGS: 'forest_study_logs_v1',
-  ACTIVE_TASK_ID: 'forest_study_active_id_v1',
-  SYNC_CODE: 'forest_study_sync_code_v1',
+  TASKS: 'forest_study_tasks_v2',
+  LOGS: 'forest_study_logs_v2',
+  ACTIVE_TASK_ID: 'forest_study_active_id_v2',
+  SYNC_CODE: 'forest_study_sync_code_v2',
 };
 
 // 6桁の同期コードを生成（例: 'FST-8932'）
@@ -41,44 +41,64 @@ export const getTodayDateString = (): string => {
   return `${year}-${month}-${day}`;
 };
 
-// 初期モックデータ
+// デフォルト期日計算（日数後）
+const getFutureDate = (days: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+};
+
+// オーソドックスな初期タスクデータ
 export const INITIAL_TASKS: StudyTask[] = [
   {
     id: 'task-1',
-    title: '統計学 第3章（確率分布）',
-    category: '数学・データサイエンス',
-    color: '#22c55e', // Emerald / Forest green
-    unit: 'pages',
-    totalQuota: 80,
-    dailyTarget: 15,
-    completedTotal: 25,
-    deadline: '2026-10-15',
+    title: '英語学習（英単語・リスニング）',
+    category: '語学・英語',
+    color: '#22c55e', // Forest green
+    unit: 'minutes',
+    totalQuota: 600,
+    dailyTarget: 30,
+    completedTotal: 150,
+    deadline: getFutureDate(14),
     createdAt: Date.now() - 86400000 * 3,
     updatedAt: Date.now() - 86400000 * 3,
   },
   {
     id: 'task-2',
-    title: 'ML特論（深層学習モデル実装）',
-    category: '機械学習',
+    title: '数学（基礎問題演習）',
+    category: '数学・理数',
     color: '#3b82f6', // Ocean Blue
-    unit: 'minutes',
-    totalQuota: 600,
-    dailyTarget: 60,
-    completedTotal: 180,
-    deadline: '2026-10-20',
+    unit: 'problems',
+    totalQuota: 100,
+    dailyTarget: 10,
+    completedTotal: 35,
+    deadline: getFutureDate(21),
     createdAt: Date.now() - 86400000 * 2,
     updatedAt: Date.now() - 86400000 * 2,
   },
   {
     id: 'task-3',
-    title: 'TOEIC リーディング演習',
-    category: '語学',
-    color: '#f59e0b', // Amber / Sun
-    unit: 'problems',
-    totalQuota: 100,
-    dailyTarget: 20,
-    completedTotal: 40,
-    deadline: '2026-10-05',
+    title: '読書・参考書（教養・専門書）',
+    category: '読書',
+    color: '#f59e0b', // Amber
+    unit: 'pages',
+    totalQuota: 200,
+    dailyTarget: 15,
+    completedTotal: 50,
+    deadline: getFutureDate(28),
+    createdAt: Date.now() - 86400000 * 1,
+    updatedAt: Date.now() - 86400000 * 1,
+  },
+  {
+    id: 'task-4',
+    title: '資格試験対策（過去問演習）',
+    category: '資格・IT',
+    color: '#a855f7', // Purple
+    unit: 'minutes',
+    totalQuota: 900,
+    dailyTarget: 45,
+    completedTotal: 200,
+    deadline: getFutureDate(14),
     createdAt: Date.now() - 86400000 * 1,
     updatedAt: Date.now() - 86400000 * 1,
   }
@@ -89,17 +109,17 @@ export const INITIAL_LOGS: DailyLog[] = [
     id: 'log-1',
     taskId: 'task-1',
     date: getTodayDateString(),
-    amount: 5,
-    mode: 'manual',
+    amount: 15,
+    mode: 'timer',
     timestamp: Date.now() - 3600000 * 2,
   },
   {
     id: 'log-2',
     taskId: 'task-2',
     date: getTodayDateString(),
-    amount: 25,
-    mode: 'timer',
-    timestamp: Date.now() - 3600000 * 4,
+    amount: 4,
+    mode: 'manual',
+    timestamp: Date.now() - 3600000 * 3,
   }
 ];
 
