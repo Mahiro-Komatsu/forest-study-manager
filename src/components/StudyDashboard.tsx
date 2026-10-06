@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   ListTodo,
@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Calendar,
   Layers,
+  Cloud,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { StudyTask, DailyLog, TimerState } from '@/types/study';
@@ -25,30 +26,37 @@ import {
   saveLogsToStorage,
   loadActiveTaskId,
   saveActiveTaskId,
+  loadSyncCodeFromStorage,
+  saveSyncCodeToStorage,
   calculateTodayProgress,
   getUnitLabel,
   getTodayDateString,
   recalculateDailyTarget,
 } from '@/lib/storage';
+import { fetchCloudData, saveCloudData, isSupabaseConfigured } from '@/lib/supabase';
 import { TimerCircle } from './TimerCircle';
 import { TaskSelectModal } from './TaskSelectModal';
 import { TaskCreateModal } from './TaskCreateModal';
 import { TaskListModal } from './TaskListModal';
 import { QuickAddModal } from './QuickAddModal';
+import { SyncModal } from './SyncModal';
 
 export const StudyDashboard: React.FC = () => {
   // 状態管理
   const [tasks, setTasks] = useState<StudyTask[]>([]);
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [activeTaskId, setActiveTaskId] = useState<string>('');
+  const [syncCode, setSyncCode] = useState<string>('');
   const [mode, setMode] = useState<'timer' | 'manual'>('timer');
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // モーダル管理
   const [isSelectModalOpen, setIsSelectModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   // タイマー状態 (デフォルト: 25分 = 1500秒)
   const DEFAULT_TIMER_SECONDS = 25 * 60;
@@ -63,29 +71,88 @@ export const StudyDashboard: React.FC = () => {
 
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 初期化 (LocalStorage から読み込み)
+  // クラウドから最新データをロード
+  const syncFromCloud = useCallback(async (code: string) => {
+    if (!isSupabaseConfigured || !code) return;
+    setIsSyncing(true);
+    try {
+      const data = await fetchCloudData(code);
+      if (data) {
+        if (data.tasks_json) {
+          const cloudTasks = JSON.parse(data.tasks_json);
+          setTasks(cloudTasks);
+          saveTasksToStorage(cloudTasks);
+        }
+        if (data.logs_json) {
+          const cloudLogs = JSON.parse(data.logs_json);
+          setLogs(cloudLogs);
+          saveLogsToStorage(cloudLogs);
+        }
+        if (data.active_task_id) {
+          setActiveTaskId(data.active_task_id);
+          saveActiveTaskId(data.active_task_id);
+        }
+      }
+    } catch (err) {
+      console.error('Sync from cloud error:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  // クラウドへ保存
+  const pushToCloud = useCallback(async (
+    currentCode: string,
+    currentTasks: StudyTask[],
+    currentLogs: DailyLog[],
+    currentActiveId: string
+  ) => {
+    if (!isSupabaseConfigured || !currentCode) return;
+    setIsSyncing(true);
+    try {
+      await saveCloudData(currentCode, currentTasks, currentLogs, currentActiveId);
+    } catch (err) {
+      console.error('Push to cloud error:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  // 初期化 (LocalStorage から読み込み & クラウド同期)
   useEffect(() => {
     const loadedTasks = loadTasksFromStorage();
     const loadedLogs = loadLogsFromStorage();
     const loadedActiveId = loadActiveTaskId(loadedTasks[0]?.id || '');
+    const loadedSyncCode = loadSyncCodeFromStorage();
 
     setTasks(loadedTasks);
     setLogs(loadedLogs);
     setActiveTaskId(loadedActiveId);
+    setSyncCode(loadedSyncCode);
     setIsLoaded(true);
-  }, []);
 
-  // タスク状態の保存
+    if (loadedSyncCode) {
+      syncFromCloud(loadedSyncCode);
+    }
+  }, [syncFromCloud]);
+
+  // タスク状態の保存 & クラウド反映
   useEffect(() => {
     if (!isLoaded) return;
     saveTasksToStorage(tasks);
-  }, [tasks, isLoaded]);
+    if (syncCode) {
+      pushToCloud(syncCode, tasks, logs, activeTaskId);
+    }
+  }, [tasks, isLoaded, pushToCloud, syncCode, logs, activeTaskId]);
 
-  // ログ状態の保存
+  // ログ状態の保存 & クラウド反映
   useEffect(() => {
     if (!isLoaded) return;
     saveLogsToStorage(logs);
-  }, [logs, isLoaded]);
+    if (syncCode) {
+      pushToCloud(syncCode, tasks, logs, activeTaskId);
+    }
+  }, [logs, isLoaded, pushToCloud, syncCode, tasks, activeTaskId]);
 
   // アクティブタスクIDの保存
   useEffect(() => {
@@ -266,6 +333,23 @@ export const StudyDashboard: React.FC = () => {
     handleAddProgress(activeTask.unit === 'minutes' ? elapsedMins : 1, 'タイマー記録完了');
   };
 
+  // 新しい同期コードの適用
+  const handleApplyNewSyncCode = async (newCode: string): Promise<boolean> => {
+    saveSyncCodeToStorage(newCode);
+    setSyncCode(newCode);
+    if (isSupabaseConfigured) {
+      await syncFromCloud(newCode);
+    }
+    return true;
+  };
+
+  // 強制手動同期
+  const handleForceCloudSync = async () => {
+    if (syncCode) {
+      await syncFromCloud(syncCode);
+    }
+  };
+
   // クイック加算ボタン（+10分 または +5単位）
   const quickAmount = activeTask?.unit === 'minutes' ? 10 : 5;
   const unitLabel = activeTask ? getUnitLabel(activeTask.unit) : '';
@@ -294,7 +378,7 @@ export const StudyDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between relative overflow-hidden select-none font-sans">
-      {/* 背景装飾（Forestのような穏やかな深い森の雰囲気） */}
+      {/* 背景装飾 */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/25 via-slate-950 to-slate-950 pointer-events-none" />
       <div
         className="absolute -top-40 left-1/2 -translate-x-1/2 w-[550px] h-[550px] rounded-full blur-[140px] opacity-20 pointer-events-none transition-all duration-700"
@@ -306,13 +390,26 @@ export const StudyDashboard: React.FC = () => {
          ========================================================================= */}
       <header className="relative z-10 w-full max-w-md mx-auto pt-6 px-4 flex items-center justify-between">
         {/* 左上: 全体計画 / 統計ボタン */}
-        <button
-          onClick={() => setIsListModalOpen(true)}
-          className="p-3 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 text-slate-300 hover:text-emerald-300 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md"
-          title="全体計画・進捗統計"
-        >
-          <ListTodo className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsListModalOpen(true)}
+            className="p-3 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 text-slate-300 hover:text-emerald-300 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md"
+            title="全体計画・進捗統計"
+          >
+            <ListTodo className="w-5 h-5" />
+          </button>
+
+          {/* 端末同期ボタン */}
+          <button
+            onClick={() => setIsSyncModalOpen(true)}
+            className={`p-3 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md flex items-center gap-1 text-xs font-semibold ${
+              isSyncing ? 'text-emerald-400' : 'text-slate-300 hover:text-emerald-300'
+            }`}
+            title="端末間クラウド同期"
+          >
+            <Cloud className={`w-5 h-5 ${isSyncing ? 'animate-pulse text-emerald-400' : ''}`} />
+          </button>
+        </div>
 
         {/* 中央: Forest風「学習対象スロット」ピル型ボタン */}
         <motion.button
@@ -325,7 +422,7 @@ export const StudyDashboard: React.FC = () => {
             className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm"
             style={{ backgroundColor: activeTask.color || '#22c55e' }}
           />
-          <span className="text-xs sm:text-sm font-bold text-white tracking-wide max-w-[170px] truncate">
+          <span className="text-xs sm:text-sm font-bold text-white tracking-wide max-w-[130px] sm:max-w-[170px] truncate">
             {activeTask.title}
           </span>
           <ChevronDown className="w-4 h-4 text-emerald-400/80 group-hover:text-emerald-300 group-hover:translate-y-0.5 transition-transform" />
@@ -472,6 +569,15 @@ export const StudyDashboard: React.FC = () => {
         onClose={() => setIsQuickAddOpen(false)}
         task={activeTask}
         onAddProgress={handleAddProgress}
+      />
+
+      <SyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        syncCode={syncCode}
+        onApplyNewSyncCode={handleApplyNewSyncCode}
+        onForceCloudSync={handleForceCloudSync}
+        isSyncing={isSyncing}
       />
     </div>
   );

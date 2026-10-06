@@ -4,6 +4,32 @@ export const STORAGE_KEYS = {
   TASKS: 'forest_study_tasks_v1',
   LOGS: 'forest_study_logs_v1',
   ACTIVE_TASK_ID: 'forest_study_active_id_v1',
+  SYNC_CODE: 'forest_study_sync_code_v1',
+};
+
+// 6桁の同期コードを生成（例: 'FST-8932'）
+export const generateSyncCode = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = 'FST-';
+  for (let i = 0; i < 4; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
+export const loadSyncCodeFromStorage = (): string => {
+  if (typeof window === 'undefined') return '';
+  let code = localStorage.getItem(STORAGE_KEYS.SYNC_CODE);
+  if (!code) {
+    code = generateSyncCode();
+    localStorage.setItem(STORAGE_KEYS.SYNC_CODE, code);
+  }
+  return code;
+};
+
+export const saveSyncCodeToStorage = (code: string) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STORAGE_KEYS.SYNC_CODE, code.toUpperCase().trim());
 };
 
 // 今日の日付 (YYYY-MM-DD)
