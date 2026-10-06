@@ -3,6 +3,7 @@ import { StudyTask, DailyLog, TaskDayProgress } from '@/types/study';
 export const STORAGE_KEYS = {
   TASKS: 'forest_study_tasks_v2',
   LOGS: 'forest_study_logs_v2',
+  EVENTS: 'forest_study_events_v2',
   ACTIVE_TASK_ID: 'forest_study_active_id_v2',
   SYNC_CODE: 'forest_study_sync_code_v2',
 };
@@ -42,7 +43,7 @@ export const getTodayDateString = (): string => {
 };
 
 // デフォルト期日計算（日数後）
-const getFutureDate = (days: number): string => {
+export const getFutureDate = (days: number): string => {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().split('T')[0];
@@ -122,6 +123,68 @@ export const INITIAL_LOGS: DailyLog[] = [
     timestamp: Date.now() - 3600000 * 3,
   }
 ];
+
+// 初期予定イベントデータ
+export const INITIAL_EVENTS: import('@/types/study').StudyScheduleEvent[] = [
+  {
+    id: 'event-1',
+    date: getTodayDateString(),
+    title: '単語テスト 復習（ターゲット100問）',
+    taskId: 'task-1',
+    time: '20:00',
+    durationMinutes: 30,
+    color: '#22c55e',
+    isCompleted: false,
+    createdAt: Date.now() - 86400000,
+  },
+  {
+    id: 'event-2',
+    date: getFutureDate(3),
+    title: '数学 模擬テスト（過去問第2回）',
+    taskId: 'task-2',
+    time: '14:00',
+    durationMinutes: 60,
+    color: '#3b82f6',
+    isCompleted: false,
+    createdAt: Date.now() - 86400000,
+  },
+  {
+    id: 'event-3',
+    date: getFutureDate(7),
+    title: '週末 読書まとめ＆レポート作成',
+    taskId: 'task-3',
+    time: '10:30',
+    durationMinutes: 45,
+    color: '#f59e0b',
+    isCompleted: false,
+    createdAt: Date.now() - 86400000,
+  }
+];
+
+// LocalStorage から予定一覧を取得
+export const loadEventsFromStorage = (): import('@/types/study').StudyScheduleEvent[] => {
+  if (typeof window === 'undefined') return INITIAL_EVENTS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.EVENTS);
+    if (!raw) {
+      saveEventsToStorage(INITIAL_EVENTS);
+      return INITIAL_EVENTS;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return INITIAL_EVENTS;
+  }
+};
+
+// LocalStorage に予定一覧を保存
+export const saveEventsToStorage = (events: import('@/types/study').StudyScheduleEvent[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
+  } catch (err) {
+    console.error('Failed to save events to localStorage:', err);
+  }
+};
 
 // LocalStorage からタスク一覧を取得
 export const loadTasksFromStorage = (): StudyTask[] => {

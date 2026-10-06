@@ -13,6 +13,7 @@ export interface CloudStudyData {
   sync_code: string;
   tasks_json: string;
   logs_json: string;
+  events_json?: string;
   active_task_id: string;
   updated_at: string;
 }
@@ -43,7 +44,8 @@ export const saveCloudData = async (
   syncCode: string,
   tasks: any[],
   logs: any[],
-  activeTaskId: string
+  activeTaskId: string,
+  events: any[] = []
 ) => {
   if (!supabase) return false;
   try {
@@ -51,6 +53,7 @@ export const saveCloudData = async (
       sync_code: syncCode,
       tasks_json: JSON.stringify(tasks),
       logs_json: JSON.stringify(logs),
+      events_json: JSON.stringify(events),
       active_task_id: activeTaskId,
       updated_at: new Date().toISOString(),
     };

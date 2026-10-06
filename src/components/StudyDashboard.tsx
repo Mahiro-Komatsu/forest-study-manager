@@ -13,17 +13,19 @@ import {
   ChevronDown,
   Clock,
   CheckCircle2,
-  Calendar,
+  Calendar as CalendarIcon,
   Layers,
   Cloud,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { StudyTask, DailyLog, TimerState } from '@/types/study';
+import { StudyTask, DailyLog, TimerState, StudyScheduleEvent } from '@/types/study';
 import {
   loadTasksFromStorage,
   saveTasksToStorage,
   loadLogsFromStorage,
   saveLogsToStorage,
+  loadEventsFromStorage,
+  saveEventsToStorage,
   loadActiveTaskId,
   saveActiveTaskId,
   loadSyncCodeFromStorage,
@@ -40,11 +42,13 @@ import { TaskCreateModal } from './TaskCreateModal';
 import { TaskListModal } from './TaskListModal';
 import { QuickAddModal } from './QuickAddModal';
 import { SyncModal } from './SyncModal';
+import { CalendarModal } from './CalendarModal';
 
 export const StudyDashboard: React.FC = () => {
   // 状態管理
   const [tasks, setTasks] = useState<StudyTask[]>([]);
   const [logs, setLogs] = useState<DailyLog[]>([]);
+  const [events, setEvents] = useState<StudyScheduleEvent[]>([]);
   const [activeTaskId, setActiveTaskId] = useState<string>('');
   const [syncCode, setSyncCode] = useState<string>('');
   const [mode, setMode] = useState<'timer' | 'manual'>('timer');
@@ -57,6 +61,7 @@ export const StudyDashboard: React.FC = () => {
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
 
   // タイマー状態 (デフォルト: 25分 = 1500秒)
   const DEFAULT_TIMER_SECONDS = 25 * 60;
@@ -88,6 +93,11 @@ export const StudyDashboard: React.FC = () => {
           setLogs(cloudLogs);
           saveLogsToStorage(cloudLogs);
         }
+        if (data.events_json) {
+          const cloudEvents = JSON.parse(data.events_json);
+          setEvents(cloudEvents);
+          saveEventsToStorage(cloudEvents);
+        }
         if (data.active_task_id) {
           setActiveTaskId(data.active_task_id);
           saveActiveTaskId(data.active_task_id);
@@ -105,12 +115,13 @@ export const StudyDashboard: React.FC = () => {
     currentCode: string,
     currentTasks: StudyTask[],
     currentLogs: DailyLog[],
-    currentActiveId: string
+    currentActiveId: string,
+    currentEvents: StudyScheduleEvent[]
   ) => {
     if (!isSupabaseConfigured || !currentCode) return;
     setIsSyncing(true);
     try {
-      await saveCloudData(currentCode, currentTasks, currentLogs, currentActiveId);
+      await saveCloudData(currentCode, currentTasks, currentLogs, currentActiveId, currentEvents);
     } catch (err) {
       console.error('Push to cloud error:', err);
     } finally {
@@ -122,11 +133,13 @@ export const StudyDashboard: React.FC = () => {
   useEffect(() => {
     const loadedTasks = loadTasksFromStorage();
     const loadedLogs = loadLogsFromStorage();
+    const loadedEvents = loadEventsFromStorage();
     const loadedActiveId = loadActiveTaskId(loadedTasks[0]?.id || '');
     const loadedSyncCode = loadSyncCodeFromStorage();
 
     setTasks(loadedTasks);
     setLogs(loadedLogs);
+    setEvents(loadedEvents);
     setActiveTaskId(loadedActiveId);
     setSyncCode(loadedSyncCode);
     setIsLoaded(true);
@@ -141,18 +154,27 @@ export const StudyDashboard: React.FC = () => {
     if (!isLoaded) return;
     saveTasksToStorage(tasks);
     if (syncCode) {
-      pushToCloud(syncCode, tasks, logs, activeTaskId);
+      pushToCloud(syncCode, tasks, logs, activeTaskId, events);
     }
-  }, [tasks, isLoaded, pushToCloud, syncCode, logs, activeTaskId]);
+  }, [tasks, isLoaded, pushToCloud, syncCode, logs, activeTaskId, events]);
 
   // ログ状態の保存 & クラウド反映
   useEffect(() => {
     if (!isLoaded) return;
     saveLogsToStorage(logs);
     if (syncCode) {
-      pushToCloud(syncCode, tasks, logs, activeTaskId);
+      pushToCloud(syncCode, tasks, logs, activeTaskId, events);
     }
-  }, [logs, isLoaded, pushToCloud, syncCode, tasks, activeTaskId]);
+  }, [logs, isLoaded, pushToCloud, syncCode, tasks, activeTaskId, events]);
+
+  // 予定イベントの保存 & クラウド反映
+  useEffect(() => {
+    if (!isLoaded) return;
+    saveEventsToStorage(events);
+    if (syncCode) {
+      pushToCloud(syncCode, tasks, logs, activeTaskId, events);
+    }
+  }, [events, isLoaded, pushToCloud, syncCode, tasks, logs, activeTaskId]);
 
   // アクティブタスクIDの保存
   useEffect(() => {
@@ -298,6 +320,28 @@ export const StudyDashboard: React.FC = () => {
     }
   };
 
+  // 予定イベントの追加
+  const handleAddEvent = (newEventData: Omit<StudyScheduleEvent, 'id' | 'createdAt'>) => {
+    const newEvent: StudyScheduleEvent = {
+      ...newEventData,
+      id: `event-${Date.now()}`,
+      createdAt: Date.now(),
+    };
+    setEvents((prev) => [newEvent, ...prev]);
+  };
+
+  // 予定イベントの削除
+  const handleDeleteEvent = (eventId: string) => {
+    setEvents((prev) => prev.filter((e) => e.id !== eventId));
+  };
+
+  // 予定完了トグル
+  const handleToggleEventCompleted = (eventId: string) => {
+    setEvents((prev) =>
+      prev.map((e) => (e.id === eventId ? { ...e, isCompleted: !e.isCompleted } : e))
+    );
+  };
+
   // タイマー操作
   const startTimer = () => {
     setTimerState((prev) => ({
@@ -388,26 +432,36 @@ export const StudyDashboard: React.FC = () => {
       {/* =========================================================================
           1. Top Header（上部スロット領域）
          ========================================================================= */}
-      <header className="relative z-10 w-full max-w-md mx-auto pt-6 px-4 flex items-center justify-between">
-        {/* 左上: 全体計画 / 統計ボタン */}
-        <div className="flex items-center gap-2">
+      <header className="relative z-10 w-full max-w-md mx-auto pt-5 px-4 flex items-center justify-between">
+        {/* 左上アイコン群: 全体計画 / カレンダー / クラウド同期 */}
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setIsListModalOpen(true)}
-            className="p-3 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 text-slate-300 hover:text-emerald-300 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md"
+            className="p-2.5 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 text-slate-300 hover:text-emerald-300 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md"
             title="全体計画・進捗統計"
           >
-            <ListTodo className="w-5 h-5" />
+            <ListTodo className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
-          {/* 端末同期ボタン */}
+          <button
+            onClick={() => setIsCalendarModalOpen(true)}
+            className="p-2.5 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 text-slate-300 hover:text-emerald-300 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md relative"
+            title="学習カレンダー・予定"
+          >
+            <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+            {events.filter((e) => e.date === getTodayDateString()).length > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            )}
+          </button>
+
           <button
             onClick={() => setIsSyncModalOpen(true)}
-            className={`p-3 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md flex items-center gap-1 text-xs font-semibold ${
+            className={`p-2.5 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md flex items-center gap-1 text-xs font-semibold ${
               isSyncing ? 'text-emerald-400' : 'text-slate-300 hover:text-emerald-300'
             }`}
             title="端末間クラウド同期"
           >
-            <Cloud className={`w-5 h-5 ${isSyncing ? 'animate-pulse text-emerald-400' : ''}`} />
+            <Cloud className={`w-4 h-4 sm:w-5 sm:h-5 ${isSyncing ? 'animate-pulse text-emerald-400' : ''}`} />
           </button>
         </div>
 
@@ -416,25 +470,25 @@ export const StudyDashboard: React.FC = () => {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => setIsSelectModalOpen(true)}
-          className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-slate-900/80 hover:bg-slate-800/90 border border-emerald-700/50 shadow-lg shadow-emerald-950/40 backdrop-blur-md transition-all group"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-slate-900/80 hover:bg-slate-800/90 border border-emerald-700/50 shadow-lg shadow-emerald-950/40 backdrop-blur-md transition-all group"
         >
           <span
-            className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm"
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
             style={{ backgroundColor: activeTask.color || '#22c55e' }}
           />
-          <span className="text-xs sm:text-sm font-bold text-white tracking-wide max-w-[130px] sm:max-w-[170px] truncate">
+          <span className="text-xs font-bold text-white tracking-wide max-w-[110px] sm:max-w-[150px] truncate">
             {activeTask.title}
           </span>
-          <ChevronDown className="w-4 h-4 text-emerald-400/80 group-hover:text-emerald-300 group-hover:translate-y-0.5 transition-transform" />
+          <ChevronDown className="w-3.5 h-3.5 text-emerald-400/80 group-hover:text-emerald-300 group-hover:translate-y-0.5 transition-transform" />
         </motion.button>
 
         {/* 右上: 新規タスク作成 / 追加ボタン */}
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="p-3 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 text-slate-300 hover:text-emerald-300 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md"
+          className="p-2.5 rounded-2xl bg-slate-900/70 hover:bg-slate-800/80 border border-emerald-900/40 text-slate-300 hover:text-emerald-300 transition-all hover:scale-105 active:scale-95 shadow-md backdrop-blur-md"
           title="新しい学習タスクを登録"
         >
-          <PlusCircle className="w-5 h-5" />
+          <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
       </header>
 
@@ -459,7 +513,7 @@ export const StudyDashboard: React.FC = () => {
       {/* =========================================================================
           3. Bottom Controls（下部アクション領域）
          ========================================================================= */}
-      <footer className="relative z-10 w-full max-w-md mx-auto pb-8 px-5 flex flex-col items-center gap-3.5">
+      <footer className="relative z-10 w-full max-w-md mx-auto pb-7 px-5 flex flex-col items-center gap-3">
         {/* メインアクションボタン */}
         {mode === 'timer' ? (
           !timerState.isRunning ? (
@@ -467,7 +521,7 @@ export const StudyDashboard: React.FC = () => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={startTimer}
-              className="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-base shadow-xl shadow-emerald-950/60 border border-emerald-400/30 flex items-center justify-center gap-2 transition-all"
+              className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-base shadow-xl shadow-emerald-950/60 border border-emerald-400/30 flex items-center justify-center gap-2 transition-all"
             >
               <Play className="w-5 h-5 fill-white" />
               学習を開始する
@@ -477,7 +531,7 @@ export const StudyDashboard: React.FC = () => {
               {timerState.isPaused ? (
                 <button
                   onClick={startTimer}
-                  className="py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md flex items-center justify-center gap-1.5 transition-all"
+                  className="py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md flex items-center justify-center gap-1.5 transition-all"
                 >
                   <Play className="w-4 h-4 fill-white" />
                   再開
@@ -485,7 +539,7 @@ export const StudyDashboard: React.FC = () => {
               ) : (
                 <button
                   onClick={pauseTimer}
-                  className="py-3.5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm shadow-md flex items-center justify-center gap-1.5 transition-all"
+                  className="py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm shadow-md flex items-center justify-center gap-1.5 transition-all"
                 >
                   <Pause className="w-4 h-4 fill-white" />
                   一時停止
@@ -493,7 +547,7 @@ export const StudyDashboard: React.FC = () => {
               )}
               <button
                 onClick={completeTimerNow}
-                className="py-3.5 rounded-2xl bg-slate-800 hover:bg-emerald-800 text-white border border-emerald-600/40 font-bold text-sm shadow-md flex items-center justify-center gap-1.5 transition-all"
+                className="py-3 rounded-2xl bg-slate-800 hover:bg-emerald-800 text-white border border-emerald-600/40 font-bold text-sm shadow-md flex items-center justify-center gap-1.5 transition-all"
               >
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 消化を完了
@@ -505,7 +559,7 @@ export const StudyDashboard: React.FC = () => {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setIsQuickAddOpen(true)}
-            className="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-base shadow-xl shadow-emerald-950/60 border border-emerald-400/30 flex items-center justify-center gap-2 transition-all"
+            className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-base shadow-xl shadow-emerald-950/60 border border-emerald-400/30 flex items-center justify-center gap-2 transition-all"
           >
             <Plus className="w-5 h-5" />
             進捗を記録する
@@ -513,11 +567,11 @@ export const StudyDashboard: React.FC = () => {
         )}
 
         {/* サブアクションコントロール */}
-        <div className="w-full flex items-center justify-between gap-3 pt-1 text-xs">
+        <div className="w-full flex items-center justify-between gap-2.5 pt-1 text-xs">
           {/* クイック+10分/+5ページ ボタン */}
           <button
             onClick={() => handleAddProgress(quickAmount)}
-            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-emerald-300 font-semibold flex items-center justify-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 shadow-sm"
+            className="flex-1 py-2 px-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-emerald-300 font-semibold flex items-center justify-center gap-1 transition-all hover:scale-[1.02] active:scale-95 shadow-sm text-[11px] sm:text-xs"
           >
             <Plus className="w-3.5 h-3.5" />
             +{quickAmount} {unitLabel} 簡易記録
@@ -527,7 +581,7 @@ export const StudyDashboard: React.FC = () => {
           <button
             onClick={handleRescheduleCurrentTask}
             title="期日までの日数から今日のノルマを再計算"
-            className="py-2.5 px-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-300 hover:text-emerald-300 font-medium flex items-center justify-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 shadow-sm"
+            className="py-2 px-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-300 hover:text-emerald-300 font-medium flex items-center justify-center gap-1 transition-all hover:scale-[1.02] active:scale-95 shadow-sm text-[11px] sm:text-xs"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             ノルマ再計算
@@ -578,6 +632,17 @@ export const StudyDashboard: React.FC = () => {
         onApplyNewSyncCode={handleApplyNewSyncCode}
         onForceCloudSync={handleForceCloudSync}
         isSyncing={isSyncing}
+      />
+
+      <CalendarModal
+        isOpen={isCalendarModalOpen}
+        onClose={() => setIsCalendarModalOpen(false)}
+        tasks={tasks}
+        logs={logs}
+        events={events}
+        onAddEvent={handleAddEvent}
+        onDeleteEvent={handleDeleteEvent}
+        onToggleEventCompleted={handleToggleEventCompleted}
       />
     </div>
   );
