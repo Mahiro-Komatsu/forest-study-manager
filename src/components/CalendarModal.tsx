@@ -15,8 +15,13 @@ import {
   BookOpen,
   Tag,
   AlertCircle,
+  Repeat,
+  Briefcase,
+  GraduationCap,
+  Sparkles,
+  Layers,
 } from 'lucide-react';
-import { StudyTask, DailyLog, StudyScheduleEvent } from '@/types/study';
+import { StudyTask, DailyLog, StudyScheduleEvent, EventCategory } from '@/types/study';
 import { getUnitLabel, getTodayDateString } from '@/lib/storage';
 
 interface CalendarModalProps {
@@ -26,9 +31,28 @@ interface CalendarModalProps {
   logs: DailyLog[];
   events: StudyScheduleEvent[];
   onAddEvent: (newEvent: Omit<StudyScheduleEvent, 'id' | 'createdAt'>) => void;
+  onAddBatchEvents?: (newEvents: Omit<StudyScheduleEvent, 'id' | 'createdAt'>[]) => void;
   onDeleteEvent: (eventId: string) => void;
+  onDeleteRecurringGroup?: (groupId: string) => void;
   onToggleEventCompleted: (eventId: string) => void;
 }
+
+const PRESET_EVENT_TEMPLATES = [
+  { title: '大学の講義・授業', category: 'class' as EventCategory, color: '#3b82f6', duration: 90 },
+  { title: 'バイト・シフト', category: 'part_time' as EventCategory, color: '#f59e0b', duration: 240 },
+  { title: '自習・復習セッション', category: 'study' as EventCategory, color: '#22c55e', duration: 60 },
+  { title: '試験・テスト', category: 'exam' as EventCategory, color: '#ef4444', duration: 60 },
+];
+
+const WEEKDAY_LABELS = [
+  { day: 0, label: '日' },
+  { day: 1, label: '月' },
+  { day: 2, label: '火' },
+  { day: 3, label: '水' },
+  { day: 4, label: '木' },
+  { day: 5, label: '金' },
+  { day: 6, label: '土' },
+];
 
 export const CalendarModal: React.FC<CalendarModalProps> = ({
   isOpen,
@@ -37,7 +61,9 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
   logs,
   events,
   onAddEvent,
+  onAddBatchEvents,
   onDeleteEvent,
+  onDeleteRecurringGroup,
   onToggleEventCompleted,
 }) => {
   const todayStr = getTodayDateString();
@@ -50,10 +76,17 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
   // 予定追加フォーム
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [newCategory, setNewCategory] = useState<EventCategory>('study');
   const [newTaskId, setNewTaskId] = useState<string>('');
-  const [newTime, setNewTime] = useState('19:00');
-  const [newDuration, setNewDuration] = useState<number>(30);
+  const [newTime, setNewTime] = useState('18:00');
+  const [newDuration, setNewDuration] = useState<number>(60);
   const [newNotes, setNewNotes] = useState('');
+  const [newColor, setNewColor] = useState('#22c55e');
+
+  // 繰り返し設定ステート
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<number[]>([new Date().getDay()]); // 選択された曜日
+  const [repeatWeeks, setRepeatWeeks] = useState<number>(4); // 何週間繰り返すか（4, 8, 12, 16）
 
   if (!isOpen) return null;
 
@@ -76,6 +109,93 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
     }
   };
 
+  // 曜日トグル
+  const toggleWeekday = (day: number) => {
+    if (selectedDays.includes(day)) {
+      if (selectedDays.length > 1) {
+        setSelectedDays(selectedDays.filter((d) => d !== day));
+      }
+    } else {
+      setSelectedDays([...selectedDays, day].sort());
+    }
+  };
+
+  // テンプレート適用
+  const applyTemplate = (tmpl: typeof PRESET_EVENT_TEMPLATES[0]) => {
+    setNewTitle(tmpl.title);
+    setNewCategory(tmpl.category);
+    setNewColor(tmpl.color);
+    setNewDuration(tmpl.duration);
+    if (tmpl.category === 'class' || tmpl.category === 'part_time') {
+      setIsRecurring(true);
+    }
+  };
+
+  // 予定作成ハンドラー（単発または繰り返し一括）
+  const handleCreateEvent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+
+    const task = tasks.find((t) => t.id === newTaskId);
+    const eventColor = task?.color || newColor;
+
+    if (!isRecurring) {
+      // 単発予定
+      onAddEvent({
+        date: selectedDate,
+        title: newTitle.trim(),
+        category: newCategory,
+        taskId: newTaskId || undefined,
+        time: newTime || undefined,
+        durationMinutes: Number(newDuration) || undefined,
+        notes: newNotes.trim() || undefined,
+        isCompleted: false,
+        color: eventColor,
+      });
+    } else {
+      // 繰り返し予定の一括生成
+      const groupId = `group-${Date.now()}`;
+      const startDate = new Date(selectedDate);
+      const generatedList: Omit<StudyScheduleEvent, 'id' | 'createdAt'>[] = [];
+
+      // 指定された週数分の日付を走査
+      const totalDays = repeatWeeks * 7;
+      for (let i = 0; i < totalDays; i++) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(startDate.getDate() + i);
+        const dayOfWeek = currentDate.getDay();
+
+        if (selectedDays.includes(dayOfWeek)) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          generatedList.push({
+            date: dateStr,
+            title: newTitle.trim(),
+            category: newCategory,
+            taskId: newTaskId || undefined,
+            time: newTime || undefined,
+            durationMinutes: Number(newDuration) || undefined,
+            notes: newNotes.trim() || undefined,
+            isCompleted: false,
+            color: eventColor,
+            recurrenceGroupId: groupId,
+          });
+        }
+      }
+
+      if (onAddBatchEvents) {
+        onAddBatchEvents(generatedList);
+      } else {
+        generatedList.forEach((ev) => onAddEvent(ev));
+      }
+    }
+
+    // リセット
+    setNewTitle('');
+    setNewNotes('');
+    setIsAddingEvent(false);
+    setIsRecurring(false);
+  };
+
   // 月の日付グリッド計算
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay(); // 0(日) - 6(土)
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -89,29 +209,6 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
     calendarDays.push({ day: d, dateStr });
   }
 
-  // 予定追加ハンドラー
-  const handleCreateEvent = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
-
-    const task = tasks.find((t) => t.id === newTaskId);
-
-    onAddEvent({
-      date: selectedDate,
-      title: newTitle.trim(),
-      taskId: newTaskId || undefined,
-      time: newTime || undefined,
-      durationMinutes: Number(newDuration) || undefined,
-      notes: newNotes.trim() || undefined,
-      isCompleted: false,
-      color: task?.color || '#22c55e',
-    });
-
-    setNewTitle('');
-    setNewNotes('');
-    setIsAddingEvent(false);
-  };
-
   // 選択日のデータ取得
   const selectedDayEvents = events.filter((e) => e.date === selectedDate);
   const selectedDayLogs = logs.filter((l) => l.date === selectedDate);
@@ -122,9 +219,23 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
     '7月', '8月', '9月', '10月', '11月', '12月'
   ];
 
+  // カテゴリに応じたアイコン表示
+  const getCategoryIcon = (category?: EventCategory) => {
+    switch (category) {
+      case 'class':
+        return <GraduationCap className="w-3.5 h-3.5 text-sky-400" />;
+      case 'part_time':
+        return <Briefcase className="w-3.5 h-3.5 text-amber-400" />;
+      case 'exam':
+        return <AlertCircle className="w-3.5 h-3.5 text-rose-400" />;
+      default:
+        return <BookOpen className="w-3.5 h-3.5 text-emerald-400" />;
+    }
+  };
+
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-sm">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -132,10 +243,15 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
           className="w-full max-w-4xl bg-slate-900 border border-emerald-800/40 rounded-3xl shadow-2xl text-slate-100 max-h-[92vh] flex flex-col overflow-hidden"
         >
           {/* ヘッダー */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-emerald-900/50 flex-shrink-0 bg-slate-900/80">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-emerald-900/50 flex-shrink-0 bg-slate-900/80">
             <div className="flex items-center gap-2.5">
               <CalendarIcon className="w-5 h-5 text-emerald-400" />
-              <h2 className="text-lg font-bold text-white">学習カレンダー ＆ 予定管理</h2>
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-white">学習カレンダー ＆ 時間割・シフト管理</h2>
+                <p className="text-[11px] text-slate-400 hidden sm:block">
+                  定期的な講義・時間割やバイトのシフトもまとめて簡単に登録・管理できます
+                </p>
+              </div>
             </div>
             <button
               onClick={onClose}
@@ -148,17 +264,17 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
           {/* メインコンテンツ（2カラム: カレンダー + 予定詳細） */}
           <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-emerald-900/40">
             {/* 左側: カレンダー本体 (7 cols) */}
-            <div className="lg:col-span-7 p-5 flex flex-col">
+            <div className="lg:col-span-7 p-4 sm:p-5 flex flex-col">
               {/* 年月ナビゲーション */}
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-3.5">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <span>{currentYear}年</span>
-                  <span className="text-emerald-400 text-lg">{monthNames[currentMonth]}</span>
+                  <span className="text-emerald-400 text-lg font-extrabold">{monthNames[currentMonth]}</span>
                 </h3>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={handlePrevMonth}
-                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                    className="p-1.5 sm:p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -175,7 +291,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                   </button>
                   <button
                     onClick={handleNextMonth}
-                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                    className="p-1.5 sm:p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -269,10 +385,10 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
               </div>
             </div>
 
-            {/* 右側: 選択日の予定・実績パネル (5 cols) */}
-            <div className="lg:col-span-5 p-5 flex flex-col bg-slate-900/50">
+            {/* 右側: 選択日の予定・実績・一括登録パネル (5 cols) */}
+            <div className="lg:col-span-5 p-4 sm:p-5 flex flex-col bg-slate-900/50">
               {/* 選択日ヘッダー */}
-              <div className="flex items-center justify-between pb-3 border-b border-emerald-900/40 mb-4">
+              <div className="flex items-center justify-between pb-3 border-b border-emerald-900/40 mb-3.5">
                 <div>
                   <div className="text-xs text-emerald-400 font-semibold">
                     {selectedDate === todayStr ? '本日のスケジュール' : '選択した日のスケジュール'}
@@ -287,7 +403,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                   className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  予定を追加
+                  {isAddingEvent ? '閉じる' : '予定・時間割を追加'}
                 </button>
               </div>
 
@@ -299,38 +415,47 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     onSubmit={handleCreateEvent}
-                    className="p-4 rounded-2xl bg-slate-800/90 border border-emerald-700/50 mb-4 space-y-3 overflow-hidden"
+                    className="p-4 rounded-2xl bg-slate-800/95 border border-emerald-700/60 mb-4 space-y-3 overflow-hidden shadow-lg"
                   >
-                    <div className="text-xs font-bold text-emerald-300">新しい予定・目標の登録</div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        新しい予定の登録
+                      </div>
+                    </div>
 
+                    {/* クイックテンプレート */}
+                    <div>
+                      <div className="text-[10px] text-slate-400 mb-1">クイック設定:</div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {PRESET_EVENT_TEMPLATES.map((tmpl) => (
+                          <button
+                            key={tmpl.title}
+                            type="button"
+                            onClick={() => applyTemplate(tmpl)}
+                            className="py-1 px-2 rounded-lg bg-slate-700/60 hover:bg-slate-700 border border-slate-600 text-[11px] text-slate-200 text-left truncate flex items-center gap-1.5 transition-all"
+                          >
+                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tmpl.color }} />
+                            <span className="truncate">{tmpl.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* タイトル入力 */}
                     <div>
                       <input
                         type="text"
                         required
-                        placeholder="例: 単語テスト、第4章まとめ演習"
+                        placeholder="予定名（例: 英語II、カフェバイト、単語復習）"
                         value={newTitle}
                         onChange={(e) => setNewTitle(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500 font-semibold"
                       />
                     </div>
 
+                    {/* 開始時間 ＆ 所要時間 */}
                     <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] text-slate-400 mb-1">関連科目</label>
-                        <select
-                          value={newTaskId}
-                          onChange={(e) => setNewTaskId(e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-                        >
-                          <option value="">（指定なし）</option>
-                          {tasks.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.title}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
                       <div>
                         <label className="block text-[10px] text-slate-400 mb-1">開始時間</label>
                         <input
@@ -340,12 +465,119 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                           className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
                         />
                       </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 mb-1">所要時間（分）</label>
+                        <input
+                          type="number"
+                          min="5"
+                          step="5"
+                          value={newDuration}
+                          onChange={(e) => setNewDuration(Number(e.target.value))}
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 関連科目 */}
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">関連する学習科目（任意）</label>
+                      <select
+                        value={newTaskId}
+                        onChange={(e) => setNewTaskId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="">（科目の指定なし / シフトなど）</option>
+                        {tasks.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 🔁 繰り返し・固定スケジュール設定 */}
+                    <div className="p-3 rounded-xl bg-slate-900/80 border border-emerald-800/40 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-emerald-300 flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isRecurring}
+                            onChange={(e) => setIsRecurring(e.target.checked)}
+                            className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <Repeat className="w-3.5 h-3.5 text-emerald-400" />
+                          周期的な予定（時間割・シフト）として繰り返す
+                        </label>
+                      </div>
+
+                      {isRecurring && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          className="space-y-2.5 pt-1 border-t border-slate-800"
+                        >
+                          {/* 曜日選択 */}
+                          <div>
+                            <div className="text-[10px] text-slate-400 mb-1.5">繰り返す曜日を選択:</div>
+                            <div className="grid grid-cols-7 gap-1">
+                              {WEEKDAY_LABELS.map((w) => {
+                                const isSelected = selectedDays.includes(w.day);
+                                return (
+                                  <button
+                                    key={w.day}
+                                    type="button"
+                                    onClick={() => toggleWeekday(w.day)}
+                                    className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                      isSelected
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                                    }`}
+                                  >
+                                    {w.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* 繰り返し期間 */}
+                          <div>
+                            <div className="text-[10px] text-slate-400 mb-1">繰り返し期間:</div>
+                            <div className="grid grid-cols-4 gap-1">
+                              {[
+                                { weeks: 4, label: '4週間 (1ヶ月)' },
+                                { weeks: 8, label: '8週間 (2ヶ月)' },
+                                { weeks: 12, label: '12週間 (1学期)' },
+                                { weeks: 16, label: '16週間 (4ヶ月)' },
+                              ].map((opt) => (
+                                <button
+                                  key={opt.weeks}
+                                  type="button"
+                                  onClick={() => setRepeatWeeks(opt.weeks)}
+                                  className={`py-1 text-[10px] font-semibold rounded-lg border transition-all ${
+                                    repeatWeeks === opt.weeks
+                                      ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300'
+                                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-800/30 text-[10px] text-emerald-300 leading-relaxed">
+                            💡 選択した曜日（{selectedDays.map((d) => WEEKDAY_LABELS.find((w) => w.day === d)?.label).join('・')}）の {newTime}〜 に今後 {repeatWeeks} 週間分（計 {selectedDays.length * repeatWeeks} 件）を一括作成します。
+                          </div>
+                        </motion.div>
+                      )}
                     </div>
 
                     <div>
                       <input
                         type="text"
-                        placeholder="メモ（任意）"
+                        placeholder="メモ（教室名、持ち物、担当など）"
                         value={newNotes}
                         onChange={(e) => setNewNotes(e.target.value)}
                         className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500"
@@ -356,15 +588,16 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsAddingEvent(false)}
-                        className="px-3 py-1 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs"
+                        className="px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs"
                       >
                         キャンセル
                       </button>
                       <button
                         type="submit"
-                        className="px-3.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow"
+                        className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow flex items-center gap-1"
                       >
-                        保存する
+                        <Plus className="w-3.5 h-3.5" />
+                        {isRecurring ? '一括登録する' : '予定を保存'}
                       </button>
                     </div>
                   </motion.form>
@@ -426,12 +659,20 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                           </button>
 
                           <div className="truncate">
-                            <div
-                              className={`text-xs font-bold truncate ${
-                                event.isCompleted ? 'line-through text-slate-400' : 'text-white'
-                              }`}
-                            >
-                              {event.title}
+                            <div className="flex items-center gap-1.5">
+                              {getCategoryIcon(event.category)}
+                              <div
+                                className={`text-xs font-bold truncate ${
+                                  event.isCompleted ? 'line-through text-slate-400' : 'text-white'
+                                }`}
+                              >
+                                {event.title}
+                              </div>
+                              {event.recurrenceGroupId && (
+                                <span className="p-0.5 rounded bg-emerald-950/60 text-emerald-400 text-[9px] flex items-center gap-0.5" title="定期・繰り返し予定">
+                                  <Repeat className="w-2.5 h-2.5" />
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
@@ -439,6 +680,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                                 <span className="flex items-center gap-0.5">
                                   <Clock className="w-3 h-3 text-emerald-400" />
                                   {event.time}
+                                  {event.durationMinutes ? ` (${event.durationMinutes}分)` : ''}
                                 </span>
                               )}
                               {relatedTask && (
@@ -459,13 +701,28 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                           </div>
                         </div>
 
-                        <button
-                          onClick={() => onDeleteEvent(event.id)}
-                          className="p-1 text-slate-500 hover:text-rose-400 transition-colors flex-shrink-0"
-                          title="予定を削除"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {event.recurrenceGroupId && onDeleteRecurringGroup && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`この定期予定「${event.title}」の全期間分を一括削除しますか？`)) {
+                                  onDeleteRecurringGroup(event.recurrenceGroupId!);
+                                }
+                              }}
+                              className="p-1 text-slate-500 hover:text-amber-400 transition-colors"
+                              title="この定期予定を一括削除"
+                            >
+                              <Repeat className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => onDeleteEvent(event.id)}
+                            className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
+                            title="この予定を削除"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })

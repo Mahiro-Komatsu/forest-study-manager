@@ -10,16 +10,20 @@ export interface DailyLog {
   timestamp: number;
 }
 
+export type EventCategory = 'study' | 'class' | 'part_time' | 'exam' | 'other';
+
 export interface StudyScheduleEvent {
   id: string;
   date: string; // YYYY-MM-DD
-  title: string; // 予定のタイトル（例: "模試", "単語テスト", "第4章まとめ"）
+  title: string; // 予定のタイトル（例: "授業", "バイト", "単語テスト"）
+  category?: EventCategory;
   taskId?: string; // 関連する科目ID（任意）
   time?: string; // 開始時刻（例: "14:00"）
   durationMinutes?: number; // 予定時間（分）
   notes?: string;
   isCompleted?: boolean;
   color?: string;
+  recurrenceGroupId?: string; // 繰り返しグループID（一括削除・管理用）
   createdAt: number;
 }
 

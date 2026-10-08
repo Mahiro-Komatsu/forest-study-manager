@@ -329,15 +329,31 @@ export const StudyDashboard: React.FC = () => {
   const handleAddEvent = (newEventData: Omit<StudyScheduleEvent, 'id' | 'createdAt'>) => {
     const newEvent: StudyScheduleEvent = {
       ...newEventData,
-      id: `event-${Date.now()}`,
+      id: `event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       createdAt: Date.now(),
     };
     setEvents((prev) => [newEvent, ...prev]);
   };
 
-  // 予定イベントの削除
+  // 複数予定イベントの一括追加（時間割・シフトなど）
+  const handleAddBatchEvents = (newEventsData: Omit<StudyScheduleEvent, 'id' | 'createdAt'>[]) => {
+    const now = Date.now();
+    const newEvents: StudyScheduleEvent[] = newEventsData.map((evData, idx) => ({
+      ...evData,
+      id: `event-${now}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: now,
+    }));
+    setEvents((prev) => [...newEvents, ...prev]);
+  };
+
+  // 予定イベントの個別削除
   const handleDeleteEvent = (eventId: string) => {
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
+  };
+
+  // 繰り返しグループの予定を一括削除
+  const handleDeleteRecurringGroup = (groupId: string) => {
+    setEvents((prev) => prev.filter((e) => e.recurrenceGroupId !== groupId));
   };
 
   // 予定完了トグル
@@ -691,7 +707,9 @@ export const StudyDashboard: React.FC = () => {
         logs={logs}
         events={events}
         onAddEvent={handleAddEvent}
+        onAddBatchEvents={handleAddBatchEvents}
         onDeleteEvent={handleDeleteEvent}
+        onDeleteRecurringGroup={handleDeleteRecurringGroup}
         onToggleEventCompleted={handleToggleEventCompleted}
       />
     </div>
