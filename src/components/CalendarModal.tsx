@@ -459,39 +459,57 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                             key={tmpl.title}
                             type="button"
                             onClick={() => applyTemplate(tmpl)}
-                            className="py-1 px-2 rounded-lg bg-slate-700/60 hover:bg-slate-700 border border-slate-600 text-[11px] text-slate-200 text-left truncate flex items-center gap-1.5 transition-all"
+                            className={`py-1.5 px-2.5 rounded-xl border text-[11px] text-left truncate flex items-center gap-1.5 transition-all ${
+                              newCategory === tmpl.category
+                                ? 'bg-slate-700/90 border-emerald-500/80 text-white font-semibold ring-1 ring-emerald-500/50 shadow-sm'
+                                : 'bg-slate-700/40 hover:bg-slate-700/80 border-slate-600/60 text-slate-300'
+                            }`}
                           >
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tmpl.color }} />
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm" style={{ backgroundColor: tmpl.color }} />
                             <span className="truncate">{tmpl.title}</span>
                           </button>
                         ))}
                       </div>
                     </div>
 
-                    {/* 🎓 授業の時限クイック選択（設定された1〜5or6限からワンタップ） */}
-                    <div>
-                      <div className="text-[10px] font-semibold text-sky-300 mb-1 flex items-center gap-1">
-                        <GraduationCap className="w-3.5 h-3.5" />
-                        時限を選択（設定時刻を自動入力）:
-                      </div>
-                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
-                        {timetableSettings.periods.map((period) => (
-                          <button
-                            key={period.period}
-                            type="button"
-                            onClick={() => applyPeriod(period)}
-                            className={`py-1 px-1.5 rounded-lg border text-center transition-all ${
-                              newPeriodIndex === period.period
-                                ? 'bg-sky-600 border-sky-400 text-white font-bold shadow-sm'
-                                : 'bg-slate-900/90 border-slate-700 hover:border-sky-500/50 text-slate-300 hover:text-white'
-                            }`}
-                          >
-                            <div className="text-[10px] font-bold">{period.name}</div>
-                            <div className="text-[9px] text-slate-400 font-mono">{period.startTime}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    {/* 🎓 授業の時限クイック選択（「大学の授業」選択時のみ表示） */}
+                    <AnimatePresence>
+                      {newCategory === 'class' && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden space-y-1.5 pt-0.5"
+                        >
+                          <div className="text-[10px] font-semibold text-sky-300 flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <GraduationCap className="w-3.5 h-3.5 text-sky-400" />
+                              時限を選択（開始時刻・所要時間を自動入力）:
+                            </span>
+                            <span className="text-[9px] text-sky-400/80 font-normal">
+                              {timetableSettings.periods.length}限制
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                            {timetableSettings.periods.map((period) => (
+                              <button
+                                key={period.period}
+                                type="button"
+                                onClick={() => applyPeriod(period)}
+                                className={`py-1.5 px-1.5 rounded-xl border text-center transition-all ${
+                                  newPeriodIndex === period.period
+                                    ? 'bg-sky-600 border-sky-300 text-white font-bold shadow-md ring-1 ring-sky-300 scale-[1.02]'
+                                    : 'bg-slate-900/90 border-slate-700 hover:border-sky-500/60 text-slate-300 hover:text-white'
+                                }`}
+                              >
+                                <div className="text-[11px] font-bold">{period.name}</div>
+                                <div className="text-[9px] text-sky-200/80 font-mono">{period.startTime}〜</div>
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
                     {/* タイトル入力 */}
                     <div>
