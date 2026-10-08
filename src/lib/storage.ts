@@ -4,8 +4,54 @@ export const STORAGE_KEYS = {
   TASKS: 'forest_study_tasks_v2',
   LOGS: 'forest_study_logs_v2',
   EVENTS: 'forest_study_events_v2',
+  TIMETABLE: 'forest_study_timetable_v2',
   ACTIVE_TASK_ID: 'forest_study_active_id_v2',
   SYNC_CODE: 'forest_study_sync_code_v2',
+};
+
+// デフォルトの大学標準時間割（90分授業・昼休み50分・6限制）
+export const DEFAULT_TIMETABLE_SETTINGS: import('@/types/study').TimetableSettings = {
+  periodCount: 6,
+  defaultPeriodMinutes: 90,
+  periods: [
+    { period: 1, name: '1限', startTime: '09:00', endTime: '10:30' },
+    { period: 2, name: '2限', startTime: '10:45', endTime: '12:15' },
+    { period: 3, name: '3限', startTime: '13:05', endTime: '14:35' },
+    { period: 4, name: '4限', startTime: '14:50', endTime: '16:20' },
+    { period: 5, name: '5限', startTime: '16:35', endTime: '18:05' },
+    { period: 6, name: '6限', startTime: '18:20', endTime: '19:50' },
+  ],
+  lunchBreak: {
+    enabled: true,
+    afterPeriod: 2,
+    startTime: '12:15',
+    endTime: '13:05',
+  },
+};
+
+// LocalStorage から時間割設定を取得
+export const loadTimetableSettingsFromStorage = (): import('@/types/study').TimetableSettings => {
+  if (typeof window === 'undefined') return DEFAULT_TIMETABLE_SETTINGS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.TIMETABLE);
+    if (!raw) {
+      saveTimetableSettingsToStorage(DEFAULT_TIMETABLE_SETTINGS);
+      return DEFAULT_TIMETABLE_SETTINGS;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return DEFAULT_TIMETABLE_SETTINGS;
+  }
+};
+
+// LocalStorage に時間割設定を保存
+export const saveTimetableSettingsToStorage = (settings: import('@/types/study').TimetableSettings) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.TIMETABLE, JSON.stringify(settings));
+  } catch (err) {
+    console.error('Failed to save timetable settings to localStorage:', err);
+  }
 };
 
 // 6桁の同期コードを生成（例: 'FST-8932'）

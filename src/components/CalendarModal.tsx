@@ -21,8 +21,8 @@ import {
   Sparkles,
   Layers,
 } from 'lucide-react';
-import { StudyTask, DailyLog, StudyScheduleEvent, EventCategory } from '@/types/study';
-import { getUnitLabel, getTodayDateString } from '@/lib/storage';
+import { StudyTask, DailyLog, StudyScheduleEvent, EventCategory, TimetableSettings, TimetablePeriod } from '@/types/study';
+import { getUnitLabel, getTodayDateString, DEFAULT_TIMETABLE_SETTINGS } from '@/lib/storage';
 
 interface CalendarModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ interface CalendarModalProps {
   tasks: StudyTask[];
   logs: DailyLog[];
   events: StudyScheduleEvent[];
+  timetableSettings?: TimetableSettings;
   onAddEvent: (newEvent: Omit<StudyScheduleEvent, 'id' | 'createdAt'>) => void;
   onAddBatchEvents?: (newEvents: Omit<StudyScheduleEvent, 'id' | 'createdAt'>[]) => void;
   onDeleteEvent: (eventId: string) => void;
@@ -60,6 +61,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
   tasks,
   logs,
   events,
+  timetableSettings = DEFAULT_TIMETABLE_SETTINGS,
   onAddEvent,
   onAddBatchEvents,
   onDeleteEvent,
@@ -77,6 +79,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<EventCategory>('study');
+  const [newPeriodIndex, setNewPeriodIndex] = useState<number | undefined>(undefined);
   const [newTaskId, setNewTaskId] = useState<string>('');
   const [newTime, setNewTime] = useState('18:00');
   const [newDuration, setNewDuration] = useState<number>(60);
@@ -126,9 +129,29 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
     setNewCategory(tmpl.category);
     setNewColor(tmpl.color);
     setNewDuration(tmpl.duration);
+    setNewPeriodIndex(undefined);
     if (tmpl.category === 'class' || tmpl.category === 'part_time') {
       setIsRecurring(true);
     }
+  };
+
+  // 時限ボタン（1限〜6限）選択時の自動セット
+  const applyPeriod = (period: TimetablePeriod) => {
+    setNewPeriodIndex(period.period);
+    setNewCategory('class');
+    setNewTime(period.startTime);
+    setNewColor('#3b82f6');
+    
+    // 開始・終了時刻から所要時間を計算
+    const [startH, startM] = period.startTime.split(':').map(Number);
+    const [endH, endM] = period.endTime.split(':').map(Number);
+    const duration = (endH * 60 + endM) - (startH * 60 + startM);
+    setNewDuration(duration > 0 ? duration : 90);
+    
+    if (!newTitle || newTitle === '大学の講義・授業' || newTitle.endsWith('限')) {
+      setNewTitle(`${period.name}`);
+    }
+    setIsRecurring(true);
   };
 
   // 予定作成ハンドラー（単発または繰り返し一括）
@@ -145,6 +168,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
         date: selectedDate,
         title: newTitle.trim(),
         category: newCategory,
+        periodIndex: newPeriodIndex,
         taskId: newTaskId || undefined,
         time: newTime || undefined,
         durationMinutes: Number(newDuration) || undefined,
@@ -171,6 +195,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
             date: dateStr,
             title: newTitle.trim(),
             category: newCategory,
+            periodIndex: newPeriodIndex,
             taskId: newTaskId || undefined,
             time: newTime || undefined,
             durationMinutes: Number(newDuration) || undefined,
@@ -192,6 +217,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
     // リセット
     setNewTitle('');
     setNewNotes('');
+    setNewPeriodIndex(undefined);
     setIsAddingEvent(false);
     setIsRecurring(false);
   };
@@ -249,7 +275,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-white">学習カレンダー ＆ 時間割・シフト管理</h2>
                 <p className="text-[11px] text-slate-400 hidden sm:block">
-                  定期的な講義・時間割やバイトのシフトもまとめて簡単に登録・管理できます
+                  設定した1〜{timetableSettings.periodCount}限の開始時刻やバイトのシフトを一括登録できます
                 </p>
               </div>
             </div>
@@ -442,12 +468,37 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                       </div>
                     </div>
 
+                    {/* 🎓 授業の時限クイック選択（設定された1〜5or6限からワンタップ） */}
+                    <div>
+                      <div className="text-[10px] font-semibold text-sky-300 mb-1 flex items-center gap-1">
+                        <GraduationCap className="w-3.5 h-3.5" />
+                        時限を選択（設定時刻を自動入力）:
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+                        {timetableSettings.periods.map((period) => (
+                          <button
+                            key={period.period}
+                            type="button"
+                            onClick={() => applyPeriod(period)}
+                            className={`py-1 px-1.5 rounded-lg border text-center transition-all ${
+                              newPeriodIndex === period.period
+                                ? 'bg-sky-600 border-sky-400 text-white font-bold shadow-sm'
+                                : 'bg-slate-900/90 border-slate-700 hover:border-sky-500/50 text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            <div className="text-[10px] font-bold">{period.name}</div>
+                            <div className="text-[9px] text-slate-400 font-mono">{period.startTime}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* タイトル入力 */}
                     <div>
                       <input
                         type="text"
                         required
-                        placeholder="予定名（例: 英語II、カフェバイト、単語復習）"
+                        placeholder="予定名（例: 統計学講義、英語II、カフェバイト）"
                         value={newTitle}
                         onChange={(e) => setNewTitle(e.target.value)}
                         className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500 font-semibold"

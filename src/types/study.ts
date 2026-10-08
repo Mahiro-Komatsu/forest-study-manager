@@ -17,6 +17,7 @@ export interface StudyScheduleEvent {
   date: string; // YYYY-MM-DD
   title: string; // 予定のタイトル（例: "授業", "バイト", "単語テスト"）
   category?: EventCategory;
+  periodIndex?: number; // 1〜6限（任意）
   taskId?: string; // 関連する科目ID（任意）
   time?: string; // 開始時刻（例: "14:00"）
   durationMinutes?: number; // 予定時間（分）
@@ -25,6 +26,27 @@ export interface StudyScheduleEvent {
   color?: string;
   recurrenceGroupId?: string; // 繰り返しグループID（一括削除・管理用）
   createdAt: number;
+}
+
+export interface TimetablePeriod {
+  period: number; // 1, 2, 3, 4, 5, 6
+  name: string; // "1限", "2限"
+  startTime: string; // "09:00"
+  endTime: string; // "10:30"
+}
+
+export interface LunchBreakSetting {
+  enabled: boolean;
+  afterPeriod: number; // 例: 2限の後
+  startTime: string; // "12:15"
+  endTime: string; // "13:05"
+}
+
+export interface TimetableSettings {
+  periodCount: number; // 5 または 6
+  defaultPeriodMinutes: number; // 90, 100, 50 など
+  periods: TimetablePeriod[];
+  lunchBreak: LunchBreakSetting;
 }
 
 export interface StudyTask {

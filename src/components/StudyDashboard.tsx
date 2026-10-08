@@ -18,7 +18,7 @@ import {
   Settings,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { StudyTask, DailyLog, TimerState, StudyScheduleEvent } from '@/types/study';
+import { StudyTask, DailyLog, TimerState, StudyScheduleEvent, TimetableSettings } from '@/types/study';
 import {
   loadTasksFromStorage,
   saveTasksToStorage,
@@ -30,6 +30,9 @@ import {
   saveActiveTaskId,
   loadSyncCodeFromStorage,
   saveSyncCodeToStorage,
+  loadTimetableSettingsFromStorage,
+  saveTimetableSettingsToStorage,
+  DEFAULT_TIMETABLE_SETTINGS,
   INITIAL_TASKS,
   INITIAL_LOGS,
   INITIAL_EVENTS,
@@ -53,6 +56,7 @@ export const StudyDashboard: React.FC = () => {
   const [tasks, setTasks] = useState<StudyTask[]>([]);
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [events, setEvents] = useState<StudyScheduleEvent[]>([]);
+  const [timetableSettings, setTimetableSettings] = useState<TimetableSettings>(DEFAULT_TIMETABLE_SETTINGS);
   const [activeTaskId, setActiveTaskId] = useState<string>('');
   const [syncCode, setSyncCode] = useState<string>('');
   const [mode, setMode] = useState<'timer' | 'manual'>('timer');
@@ -139,12 +143,14 @@ export const StudyDashboard: React.FC = () => {
     const loadedTasks = loadTasksFromStorage();
     const loadedLogs = loadLogsFromStorage();
     const loadedEvents = loadEventsFromStorage();
+    const loadedTimetable = loadTimetableSettingsFromStorage();
     const loadedActiveId = loadActiveTaskId(loadedTasks[0]?.id || '');
     const loadedSyncCode = loadSyncCodeFromStorage();
 
     setTasks(loadedTasks);
     setLogs(loadedLogs);
     setEvents(loadedEvents);
+    setTimetableSettings(loadedTimetable);
     setActiveTaskId(loadedActiveId);
     setSyncCode(loadedSyncCode);
     setIsLoaded(true);
@@ -153,6 +159,11 @@ export const StudyDashboard: React.FC = () => {
       syncFromCloud(loadedSyncCode);
     }
   }, [syncFromCloud]);
+
+  const handleUpdateTimetableSettings = (newSettings: TimetableSettings) => {
+    setTimetableSettings(newSettings);
+    saveTimetableSettingsToStorage(newSettings);
+  };
 
   // タスク状態の保存 & クラウド反映
   useEffect(() => {
@@ -696,6 +707,8 @@ export const StudyDashboard: React.FC = () => {
         tasks={tasks}
         logs={logs}
         events={events}
+        timetableSettings={timetableSettings}
+        onUpdateTimetableSettings={handleUpdateTimetableSettings}
         onResetAllData={handleResetAllData}
         onImportData={handleImportData}
       />
@@ -706,6 +719,7 @@ export const StudyDashboard: React.FC = () => {
         tasks={tasks}
         logs={logs}
         events={events}
+        timetableSettings={timetableSettings}
         onAddEvent={handleAddEvent}
         onAddBatchEvents={handleAddBatchEvents}
         onDeleteEvent={handleDeleteEvent}
