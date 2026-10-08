@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Plus, X, BookOpen, Clock, Layers } from 'lucide-react';
+import { Check, Plus, X, Layers, Pencil } from 'lucide-react';
 import { StudyTask, DailyLog } from '@/types/study';
 import { calculateTodayProgress, getUnitLabel } from '@/lib/storage';
+import { TaskEditModal } from './TaskEditModal';
 
 interface TaskSelectModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface TaskSelectModalProps {
   activeTaskId: string;
   onSelectTask: (taskId: string) => void;
   onOpenCreateModal: () => void;
+  onUpdateTasks?: (tasks: StudyTask[]) => void;
 }
 
 export const TaskSelectModal: React.FC<TaskSelectModalProps> = ({
@@ -24,8 +26,19 @@ export const TaskSelectModal: React.FC<TaskSelectModalProps> = ({
   activeTaskId,
   onSelectTask,
   onOpenCreateModal,
+  onUpdateTasks,
 }) => {
+  const [editingTask, setEditingTask] = useState<StudyTask | null>(null);
+
   if (!isOpen) return null;
+
+  const handleSaveEditedTask = (updatedTask: StudyTask) => {
+    if (onUpdateTasks) {
+      const nextTasks = tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+      onUpdateTasks(nextTasks);
+    }
+    setEditingTask(null);
+  };
 
   return (
     <AnimatePresence>
@@ -58,21 +71,21 @@ export const TaskSelectModal: React.FC<TaskSelectModalProps> = ({
               const unitLabel = getUnitLabel(task.unit);
 
               return (
-                <motion.div
+                <div
                   key={task.id}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.99 }}
-                  onClick={() => {
-                    onSelectTask(task.id);
-                    onClose();
-                  }}
-                  className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                  className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-2 ${
                     isActive
                       ? 'bg-emerald-950/60 border-emerald-500 shadow-md shadow-emerald-950/50 ring-1 ring-emerald-500/50'
                       : 'bg-slate-800/60 border-slate-700/50 hover:bg-slate-800 hover:border-emerald-700/60'
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    onClick={() => {
+                      onSelectTask(task.id);
+                      onClose();
+                    }}
+                    className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                  >
                     <span
                       className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm"
                       style={{ backgroundColor: task.color || '#22c55e' }}
@@ -91,12 +104,25 @@ export const TaskSelectModal: React.FC<TaskSelectModalProps> = ({
                     </div>
                   </div>
 
-                  {isActive && (
-                    <div className="flex-shrink-0 p-1 bg-emerald-500/20 text-emerald-400 rounded-full">
-                      <Check className="w-4 h-4" />
-                    </div>
-                  )}
-                </motion.div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTask(task);
+                      }}
+                      title="この科目を編集"
+                      className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-emerald-300 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+
+                    {isActive && (
+                      <div className="p-1 bg-emerald-500/20 text-emerald-400 rounded-full">
+                        <Check className="w-4 h-4" />
+                      </div>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -115,6 +141,14 @@ export const TaskSelectModal: React.FC<TaskSelectModalProps> = ({
             </button>
           </div>
         </motion.div>
+
+        {/* 編集モーダル */}
+        <TaskEditModal
+          isOpen={editingTask !== null}
+          onClose={() => setEditingTask(null)}
+          task={editingTask}
+          onSaveTask={handleSaveEditedTask}
+        />
       </div>
     </AnimatePresence>
   );

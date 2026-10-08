@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, BarChart3, RefreshCw, Trash2, Calendar, CheckCircle2, TrendingUp } from 'lucide-react';
+import { X, BarChart3, RefreshCw, Trash2, Calendar, CheckCircle2, TrendingUp, Pencil } from 'lucide-react';
 import { StudyTask, DailyLog } from '@/types/study';
 import { calculateTodayProgress, getUnitLabel, recalculateDailyTarget } from '@/lib/storage';
+import { TaskEditModal } from './TaskEditModal';
 
 interface TaskListModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
   onDeleteTask,
   onSelectTask,
 }) => {
+  const [editingTask, setEditingTask] = useState<StudyTask | null>(null);
+
   if (!isOpen) return null;
 
   // 全タスクの一括リスケジュール
@@ -48,19 +51,20 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
   // 個別リスケジュール
   const handleRescheduleSingle = (task: StudyTask) => {
     const newDaily = recalculateDailyTarget(task);
-    const updated = tasks.map((t) => (t.id === task.id ? { ...t, dailyTarget: newDaily } : t));
+    const updated = tasks.map((t) => (t.id === task.id ? { ...t, dailyTarget: newDaily, updatedAt: Date.now() } : t));
     onUpdateTasks(updated);
   };
 
-  // 本日の総消化量・統計
-  const totalTodayItems = tasks.reduce((sum, task) => {
-    const prog = calculateTodayProgress(task, logs);
-    return sum + prog.todayCompleted;
-  }, 0);
+  // 個別タスクの保存
+  const handleSaveEditedTask = (updatedTask: StudyTask) => {
+    const nextTasks = tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+    onUpdateTasks(nextTasks);
+    setEditingTask(null);
+  };
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -88,7 +92,7 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
                 遅延時のスマート・リスケジュール
               </div>
               <div className="text-[11px] text-emerald-400/70">
-                期日までの残り日数をもとに、今日必要な日次ノルマを自動調整します
+                期日までの残り日数をもとに、今日必要な日次ノルマを一括再計算します
               </div>
             </div>
             <button
@@ -120,9 +124,9 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
                     className="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/60 hover:border-emerald-700/50 transition-all"
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <span
-                          className="w-3 h-3 rounded-full"
+                          className="w-3.5 h-3.5 rounded-full flex-shrink-0"
                           style={{ backgroundColor: task.color || '#22c55e' }}
                         />
                         <button
@@ -130,25 +134,36 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
                             onSelectTask(task.id);
                             onClose();
                           }}
-                          className="font-semibold text-white text-sm hover:text-emerald-300 transition-colors text-left"
+                          className="font-semibold text-white text-sm hover:text-emerald-300 transition-colors text-left truncate"
                         >
                           {task.title}
                         </button>
                         {task.category && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 flex-shrink-0">
                             {task.category}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      {/* アクションボタン群（編集、再計算、削除） */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => setEditingTask(task)}
+                          title="科目の設定・目標時間を編集"
+                          className="p-1.5 rounded-lg bg-slate-700/50 hover:bg-emerald-600/30 text-slate-300 hover:text-emerald-300 transition-colors flex items-center gap-1 text-xs px-2"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline text-[11px]">編集</span>
+                        </button>
+
                         <button
                           onClick={() => handleRescheduleSingle(task)}
                           title="この科目の日次目標を再計算"
-                          className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-emerald-300 transition-colors"
+                          className="p-1.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-emerald-300 transition-colors"
                         >
                           <RefreshCw className="w-3.5 h-3.5" />
                         </button>
+
                         <button
                           onClick={() => {
                             if (confirm(`「${task.title}」を削除しますか？`)) {
@@ -156,7 +171,7 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
                             }
                           }}
                           title="タスクを削除"
-                          className="p-1.5 rounded-lg hover:bg-red-950/60 text-slate-400 hover:text-red-400 transition-colors"
+                          className="p-1.5 rounded-lg bg-slate-700/50 hover:bg-red-950/60 text-slate-400 hover:text-red-400 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -183,7 +198,7 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
                     {/* 日次ノルマ ＆ 期日情報 */}
                     <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-slate-700/50 text-[11px] text-slate-300">
                       <div>
-                        本日の進捗:{' '}
+                        本日の目標:{' '}
                         <span className="font-bold text-white">
                           {todayProg.todayCompleted} / {task.dailyTarget} {unitLabel}
                         </span>{' '}
@@ -200,6 +215,14 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
             )}
           </div>
         </motion.div>
+
+        {/* タスク編集モーダル */}
+        <TaskEditModal
+          isOpen={editingTask !== null}
+          onClose={() => setEditingTask(null)}
+          task={editingTask}
+          onSaveTask={handleSaveEditedTask}
+        />
       </div>
     </AnimatePresence>
   );

@@ -633,6 +633,7 @@ export const StudyDashboard: React.FC = () => {
         activeTaskId={activeTaskId}
         onSelectTask={setActiveTaskId}
         onOpenCreateModal={() => setIsCreateModalOpen(true)}
+        onUpdateTasks={setTasks}
       />
 
       <TaskCreateModal
