@@ -44,6 +44,7 @@ import { TaskSelectModal } from './TaskSelectModal';
 import { TaskCreateModal } from './TaskCreateModal';
 import { TaskListModal } from './TaskListModal';
 import { QuickAddModal } from './QuickAddModal';
+import { QuickConfirmModal } from './QuickConfirmModal';
 import { SettingsModal } from './SettingsModal';
 import { CalendarModal } from './CalendarModal';
 
@@ -63,6 +64,7 @@ export const StudyDashboard: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isQuickConfirmOpen, setIsQuickConfirmOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
 
@@ -601,9 +603,9 @@ export const StudyDashboard: React.FC = () => {
 
         {/* サブアクションコントロール */}
         <div className="w-full flex items-center justify-between gap-2.5 pt-1 text-xs">
-          {/* クイック+10分/+5ページ ボタン */}
+          {/* クイック+10分/+5ページ ボタン（確認画面を開く） */}
           <button
-            onClick={() => handleAddProgress(quickAmount)}
+            onClick={() => setIsQuickConfirmOpen(true)}
             className="flex-1 py-2 px-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-emerald-300 font-semibold flex items-center justify-center gap-1 transition-all hover:scale-[1.02] active:scale-95 shadow-sm text-[11px] sm:text-xs"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -657,6 +659,15 @@ export const StudyDashboard: React.FC = () => {
         onClose={() => setIsQuickAddOpen(false)}
         task={activeTask}
         onAddProgress={handleAddProgress}
+      />
+
+      <QuickConfirmModal
+        isOpen={isQuickConfirmOpen}
+        onClose={() => setIsQuickConfirmOpen(false)}
+        task={activeTask}
+        currentProgress={activeProgress}
+        defaultAmount={quickAmount}
+        onConfirm={handleAddProgress}
       />
 
       <SettingsModal
