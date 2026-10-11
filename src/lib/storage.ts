@@ -121,7 +121,7 @@ export const getFutureDate = (days: number): string => {
   return d.toISOString().split('T')[0];
 };
 
-// オーソドックスな初期タスクデータ
+// オーソドックスな初期タスクデータ（初期学習時間は0からスタート）
 export const INITIAL_TASKS: StudyTask[] = [
   {
     id: 'task-1',
@@ -131,10 +131,10 @@ export const INITIAL_TASKS: StudyTask[] = [
     unit: 'minutes',
     totalQuota: 600,
     dailyTarget: 30,
-    completedTotal: 150,
+    completedTotal: 0,
     deadline: getFutureDate(14),
-    createdAt: Date.now() - 86400000 * 3,
-    updatedAt: Date.now() - 86400000 * 3,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   },
   {
     id: 'task-2',
@@ -144,10 +144,10 @@ export const INITIAL_TASKS: StudyTask[] = [
     unit: 'problems',
     totalQuota: 100,
     dailyTarget: 10,
-    completedTotal: 35,
+    completedTotal: 0,
     deadline: getFutureDate(21),
-    createdAt: Date.now() - 86400000 * 2,
-    updatedAt: Date.now() - 86400000 * 2,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   },
   {
     id: 'task-3',
@@ -157,10 +157,10 @@ export const INITIAL_TASKS: StudyTask[] = [
     unit: 'pages',
     totalQuota: 200,
     dailyTarget: 15,
-    completedTotal: 50,
+    completedTotal: 0,
     deadline: getFutureDate(28),
-    createdAt: Date.now() - 86400000 * 1,
-    updatedAt: Date.now() - 86400000 * 1,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   },
   {
     id: 'task-4',
@@ -170,68 +170,17 @@ export const INITIAL_TASKS: StudyTask[] = [
     unit: 'minutes',
     totalQuota: 900,
     dailyTarget: 45,
-    completedTotal: 200,
+    completedTotal: 0,
     deadline: getFutureDate(14),
-    createdAt: Date.now() - 86400000 * 1,
-    updatedAt: Date.now() - 86400000 * 1,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   }
 ];
 
-export const INITIAL_LOGS: DailyLog[] = [
-  {
-    id: 'log-1',
-    taskId: 'task-1',
-    date: getTodayDateString(),
-    amount: 15,
-    mode: 'timer',
-    timestamp: Date.now() - 3600000 * 2,
-  },
-  {
-    id: 'log-2',
-    taskId: 'task-2',
-    date: getTodayDateString(),
-    amount: 4,
-    mode: 'manual',
-    timestamp: Date.now() - 3600000 * 3,
-  }
-];
+export const INITIAL_LOGS: DailyLog[] = [];
 
-// 初期予定イベントデータ
-export const INITIAL_EVENTS: import('@/types/study').StudyScheduleEvent[] = [
-  {
-    id: 'event-1',
-    date: getTodayDateString(),
-    title: '単語テスト 復習（ターゲット100問）',
-    taskId: 'task-1',
-    time: '20:00',
-    durationMinutes: 30,
-    color: '#22c55e',
-    isCompleted: false,
-    createdAt: Date.now() - 86400000,
-  },
-  {
-    id: 'event-2',
-    date: getFutureDate(3),
-    title: '数学 模擬テスト（過去問第2回）',
-    taskId: 'task-2',
-    time: '14:00',
-    durationMinutes: 60,
-    color: '#3b82f6',
-    isCompleted: false,
-    createdAt: Date.now() - 86400000,
-  },
-  {
-    id: 'event-3',
-    date: getFutureDate(7),
-    title: '週末 読書まとめ＆レポート作成',
-    taskId: 'task-3',
-    time: '10:30',
-    durationMinutes: 45,
-    color: '#f59e0b',
-    isCompleted: false,
-    createdAt: Date.now() - 86400000,
-  }
-];
+// 初期予定イベントデータ（初期状態は空）
+export const INITIAL_EVENTS: import('@/types/study').StudyScheduleEvent[] = [];
 
 // LocalStorage から予定一覧を取得
 export const loadEventsFromStorage = (): import('@/types/study').StudyScheduleEvent[] => {
@@ -242,7 +191,13 @@ export const loadEventsFromStorage = (): import('@/types/study').StudyScheduleEv
       saveEventsToStorage(INITIAL_EVENTS);
       return INITIAL_EVENTS;
     }
-    return JSON.parse(raw);
+    const parsed: import('@/types/study').StudyScheduleEvent[] = JSON.parse(raw);
+    // 初期サンプルとして紛れ込んでいた古いイベント（event-1, event-2, event-3）を自動クリーンアップ
+    const cleaned = parsed.filter((e) => e.id !== 'event-1' && e.id !== 'event-2' && e.id !== 'event-3');
+    if (cleaned.length !== parsed.length) {
+      saveEventsToStorage(cleaned);
+    }
+    return cleaned;
   } catch {
     return INITIAL_EVENTS;
   }
@@ -267,7 +222,26 @@ export const loadTasksFromStorage = (): StudyTask[] => {
       saveTasksToStorage(INITIAL_TASKS);
       return INITIAL_TASKS;
     }
-    return JSON.parse(raw);
+    const parsed: StudyTask[] = JSON.parse(raw);
+    // 初期サンプルの古い累計時間（completedTotal: 150など）が入っている場合は0に補正
+    const hasOldSampleTotals = parsed.some(
+      (t) =>
+        (t.id === 'task-1' && t.completedTotal === 150) ||
+        (t.id === 'task-2' && t.completedTotal === 35) ||
+        (t.id === 'task-3' && t.completedTotal === 50) ||
+        (t.id === 'task-4' && t.completedTotal === 200)
+    );
+    if (hasOldSampleTotals) {
+      const cleaned = parsed.map((t) => {
+        if (['task-1', 'task-2', 'task-3', 'task-4'].includes(t.id)) {
+          return { ...t, completedTotal: 0 };
+        }
+        return t;
+      });
+      saveTasksToStorage(cleaned);
+      return cleaned;
+    }
+    return parsed;
   } catch {
     return INITIAL_TASKS;
   }
@@ -292,7 +266,13 @@ export const loadLogsFromStorage = (): DailyLog[] => {
       saveLogsToStorage(INITIAL_LOGS);
       return INITIAL_LOGS;
     }
-    return JSON.parse(raw);
+    const parsed: DailyLog[] = JSON.parse(raw);
+    // 過去のデフォルトサンプルログ（log-1, log-2）を自動クリーンアップ
+    const cleaned = parsed.filter((l) => l.id !== 'log-1' && l.id !== 'log-2');
+    if (cleaned.length !== parsed.length) {
+      saveLogsToStorage(cleaned);
+    }
+    return cleaned;
   } catch {
     return INITIAL_LOGS;
   }
