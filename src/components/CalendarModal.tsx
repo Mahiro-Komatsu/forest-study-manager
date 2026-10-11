@@ -20,9 +20,17 @@ import {
   GraduationCap,
   Sparkles,
   Layers,
+  Moon,
 } from 'lucide-react';
 import { StudyTask, DailyLog, StudyScheduleEvent, EventCategory, TimetableSettings, TimetablePeriod } from '@/types/study';
-import { getUnitLabel, getTodayDateString, DEFAULT_TIMETABLE_SETTINGS } from '@/lib/storage';
+import {
+  getUnitLabel,
+  getTodayDateString,
+  DEFAULT_TIMETABLE_SETTINGS,
+  DEFAULT_SLEEP_HOURS,
+  calculateDisposableTime,
+  formatMinutesToHours,
+} from '@/lib/storage';
 
 interface CalendarModalProps {
   isOpen: boolean;
@@ -31,6 +39,7 @@ interface CalendarModalProps {
   logs: DailyLog[];
   events: StudyScheduleEvent[];
   timetableSettings?: TimetableSettings;
+  sleepHours?: number;
   onAddEvent: (newEvent: Omit<StudyScheduleEvent, 'id' | 'createdAt'>) => void;
   onAddBatchEvents?: (newEvents: Omit<StudyScheduleEvent, 'id' | 'createdAt'>[]) => void;
   onDeleteEvent: (eventId: string) => void;
@@ -62,6 +71,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
   logs,
   events,
   timetableSettings = DEFAULT_TIMETABLE_SETTINGS,
+  sleepHours = DEFAULT_SLEEP_HOURS,
   onAddEvent,
   onAddBatchEvents,
   onDeleteEvent,
@@ -239,6 +249,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
   const selectedDayEvents = events.filter((e) => e.date === selectedDate);
   const selectedDayLogs = logs.filter((l) => l.date === selectedDate);
   const selectedDayDeadlines = tasks.filter((t) => t.deadline === selectedDate);
+  const selectedDayDisposable = calculateDisposableTime(selectedDate, events, logs, tasks, sleepHours);
 
   const monthNames = [
     '1月', '2月', '3月', '4月', '5月', '6月',
@@ -431,6 +442,83 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   {isAddingEvent ? '閉じる' : '予定・時間割を追加'}
                 </button>
+              </div>
+
+              {/* ⏳ その日の勉強可能時間（可処分時間）サマリーカード */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-600/40 mb-3.5 space-y-2.5 shadow-md">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 flex-shrink-0">
+                      <Clock className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                        勉強可能時間（可処分時間）
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        24h − 睡眠{sleepHours}h − 予定{formatMinutesToHours(selectedDayDisposable.eventsMinutes)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-base sm:text-lg font-extrabold text-emerald-400 tracking-tight">
+                      {formatMinutesToHours(selectedDayDisposable.availableMinutes)}
+                    </div>
+                    {selectedDayDisposable.studiedMinutes > 0 && (
+                      <div className="text-[10px] text-emerald-300 font-medium">
+                        消化: {formatMinutesToHours(selectedDayDisposable.studiedMinutes)} / 残り: {formatMinutesToHours(selectedDayDisposable.remainingAvailableMinutes)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 24時間の配分ビジュアルバー */}
+                <div className="space-y-1.5 pt-1 border-t border-emerald-900/40">
+                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden flex">
+                    {/* 睡眠 */}
+                    <div
+                      className="bg-indigo-500 h-full"
+                      style={{ width: `${Math.min(100, (selectedDayDisposable.sleepMinutes / 1440) * 100)}%` }}
+                      title={`睡眠: ${sleepHours}時間`}
+                    />
+                    {/* 予定 */}
+                    <div
+                      className="bg-amber-500 h-full"
+                      style={{ width: `${Math.min(100, (selectedDayDisposable.eventsMinutes / 1440) * 100)}%` }}
+                      title={`予定: ${formatMinutesToHours(selectedDayDisposable.eventsMinutes)}`}
+                    />
+                    {/* 消化済み勉強 */}
+                    {selectedDayDisposable.studiedMinutes > 0 && (
+                      <div
+                        className="bg-emerald-400 h-full"
+                        style={{ width: `${Math.min(100, (Math.min(selectedDayDisposable.studiedMinutes, selectedDayDisposable.availableMinutes) / 1440) * 100)}%` }}
+                        title={`消化済勉強: ${formatMinutesToHours(selectedDayDisposable.studiedMinutes)}`}
+                      />
+                    )}
+                    {/* 残り勉強可能 */}
+                    <div
+                      className="bg-emerald-600/70 h-full"
+                      style={{ width: `${Math.min(100, (selectedDayDisposable.remainingAvailableMinutes / 1440) * 100)}%` }}
+                      title={`残り勉強可能: ${formatMinutesToHours(selectedDayDisposable.remainingAvailableMinutes)}`}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[9px] text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                      睡眠 {sleepHours}h
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      予定 {formatMinutesToHours(selectedDayDisposable.eventsMinutes)}
+                    </span>
+                    <span className="flex items-center gap-1 text-emerald-300 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      勉強可能 {formatMinutesToHours(selectedDayDisposable.availableMinutes)}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* 予定追加フォーム（アコーディオン展開） */}

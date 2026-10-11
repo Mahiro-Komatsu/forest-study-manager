@@ -89,3 +89,13 @@ export type TimerState = {
   activeTaskId: string | null;
   startedAt: number | null;
 };
+
+export interface DisposableTimeInfo {
+  totalMinutesInDay: number; // 24時間 = 1440分
+  sleepMinutes: number; // 睡眠時間（分）
+  eventsMinutes: number; // その日の予定の合計時間（分）
+  availableMinutes: number; // 勉強可能時間（可処分時間 = max(0, 1440 - 睡眠分 - 予定分)）
+  studiedMinutes: number; // すでに学習した実績時間（分）
+  remainingAvailableMinutes: number; // 残り勉強可能時間 = max(0, availableMinutes - studiedMinutes)
+}
+

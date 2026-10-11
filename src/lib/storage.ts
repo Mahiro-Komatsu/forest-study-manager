@@ -1,13 +1,16 @@
-import { StudyTask, DailyLog, TaskDayProgress } from '@/types/study';
+import { StudyTask, DailyLog, TaskDayProgress, StudyScheduleEvent, DisposableTimeInfo } from '@/types/study';
 
 export const STORAGE_KEYS = {
   TASKS: 'forest_study_tasks_v2',
   LOGS: 'forest_study_logs_v2',
   EVENTS: 'forest_study_events_v2',
   TIMETABLE: 'forest_study_timetable_v2',
+  SLEEP_HOURS: 'forest_study_sleep_hours_v2',
   ACTIVE_TASK_ID: 'forest_study_active_id_v2',
   SYNC_CODE: 'forest_study_sync_code_v2',
 };
+
+export const DEFAULT_SLEEP_HOURS = 7;
 
 // デフォルトの大学標準時間割（90分授業・昼休み50分・6限制）
 export const DEFAULT_TIMETABLE_SETTINGS: import('@/types/study').TimetableSettings = {
@@ -51,6 +54,29 @@ export const saveTimetableSettingsToStorage = (settings: import('@/types/study')
     localStorage.setItem(STORAGE_KEYS.TIMETABLE, JSON.stringify(settings));
   } catch (err) {
     console.error('Failed to save timetable settings to localStorage:', err);
+  }
+};
+
+// LocalStorage から睡眠時間（時間単位、デフォルト7h）を取得
+export const loadSleepHoursFromStorage = (): number => {
+  if (typeof window === 'undefined') return DEFAULT_SLEEP_HOURS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SLEEP_HOURS);
+    if (!raw) return DEFAULT_SLEEP_HOURS;
+    const parsed = parseFloat(raw);
+    return isNaN(parsed) || parsed < 0 || parsed > 24 ? DEFAULT_SLEEP_HOURS : parsed;
+  } catch {
+    return DEFAULT_SLEEP_HOURS;
+  }
+};
+
+// LocalStorage に睡眠時間を保存
+export const saveSleepHoursToStorage = (hours: number) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.SLEEP_HOURS, String(hours));
+  } catch (err) {
+    console.error('Failed to save sleep hours to localStorage:', err);
   }
 };
 
@@ -350,3 +376,60 @@ export const recalculateDailyTarget = (task: StudyTask): number => {
   
   return Math.ceil(remainingTotal / diffDays);
 };
+
+/**
+ * 指定日の可処分時間（勉強可能時間）と内訳を算出
+ * 可処分時間 = 24時間(1440分) - (睡眠時間 * 60) - その日の予定時間合計(分)
+ */
+export const calculateDisposableTime = (
+  dateStr: string,
+  events: StudyScheduleEvent[],
+  logs: DailyLog[],
+  tasks: StudyTask[],
+  sleepHours: number = DEFAULT_SLEEP_HOURS
+): DisposableTimeInfo => {
+  const sleepMinutes = Math.round(sleepHours * 60);
+
+  // その日のカレンダー予定の所要時間合計 (分)
+  const dayEvents = events.filter((e) => e.date === dateStr);
+  const eventsMinutes = dayEvents.reduce((sum, ev) => sum + (ev.durationMinutes || 0), 0);
+
+  // 勉強可能時間（可処分時間）
+  const availableMinutes = Math.max(0, 1440 - sleepMinutes - eventsMinutes);
+
+  // その日すでに実施・記録した学習時間 (分)
+  const dayLogs = logs.filter((l) => l.date === dateStr);
+  const studiedMinutes = dayLogs.reduce((sum, l) => {
+    // minutes unit のタスクまたはタイマー記録の場合
+    const task = tasks.find((t) => t.id === l.taskId);
+    if (!task || task.unit === 'minutes') {
+      return sum + (l.amount || 0);
+    }
+    // ページや問題数の場合も、もしタイマー記録があれば所要時間を推計、基本はそのまま記録分または考慮
+    return sum;
+  }, 0);
+
+  const remainingAvailableMinutes = Math.max(0, availableMinutes - studiedMinutes);
+
+  return {
+    totalMinutesInDay: 1440,
+    sleepMinutes,
+    eventsMinutes,
+    availableMinutes,
+    studiedMinutes,
+    remainingAvailableMinutes,
+  };
+};
+
+/**
+ * 分を「X時間Y分」形式にフォーマット
+ */
+export const formatMinutesToHours = (minutes: number): string => {
+  if (minutes <= 0) return '0時間';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}分`;
+  if (m === 0) return `${h}時間`;
+  return `${h}時間${m}分`;
+};
+

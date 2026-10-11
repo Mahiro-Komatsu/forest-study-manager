@@ -23,10 +23,11 @@ import {
   Utensils,
   Save,
   Sparkles,
+  Moon,
 } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { StudyTask, DailyLog, StudyScheduleEvent, TimetableSettings } from '@/types/study';
-import { DEFAULT_TIMETABLE_SETTINGS } from '@/lib/storage';
+import { DEFAULT_TIMETABLE_SETTINGS, DEFAULT_SLEEP_HOURS } from '@/lib/storage';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -39,7 +40,9 @@ interface SettingsModalProps {
   logs: DailyLog[];
   events: StudyScheduleEvent[];
   timetableSettings: TimetableSettings;
+  sleepHours: number;
   onUpdateTimetableSettings: (settings: TimetableSettings) => void;
+  onUpdateSleepHours: (hours: number) => void;
   onResetAllData: () => void;
   onImportData: (importedData: { tasks: StudyTask[]; logs: DailyLog[]; events: StudyScheduleEvent[] }) => void;
 }
@@ -55,7 +58,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   logs,
   events,
   timetableSettings,
+  sleepHours = DEFAULT_SLEEP_HOURS,
   onUpdateTimetableSettings,
+  onUpdateSleepHours,
   onResetAllData,
   onImportData,
 }) => {
@@ -64,8 +69,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 時間割設定のローカル編集用ステート
+  // 時間割設定 & 睡眠時間のローカル編集用ステート
   const [tempTimetable, setTempTimetable] = useState<TimetableSettings>(timetableSettings);
+  const [tempSleepHours, setTempSleepHours] = useState<number>(sleepHours);
 
   if (!isOpen) return null;
 
@@ -170,12 +176,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // 時間割設定の保存
+  // 時間割 & 睡眠時間設定の保存
   const handleSaveTimetable = () => {
     onUpdateTimetableSettings(tempTimetable);
+    onUpdateSleepHours(tempSleepHours);
     setStatusMessage({
       type: 'success',
-      text: '時間割設定を保存しました！カレンダーで反映されます。',
+      text: '時間割と生活リズム（睡眠時間）設定を保存しました！',
     });
     setTimeout(() => setStatusMessage(null), 3000);
   };
@@ -189,6 +196,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       logs,
       events,
       timetableSettings: tempTimetable,
+      sleepHours: tempSleepHours,
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -217,6 +225,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           if (json.timetableSettings) {
             setTempTimetable(json.timetableSettings);
             onUpdateTimetableSettings(json.timetableSettings);
+          }
+          if (typeof json.sleepHours === 'number') {
+            setTempSleepHours(json.sleepHours);
+            onUpdateSleepHours(json.sleepHours);
           }
           setStatusMessage({
             type: 'success',
@@ -269,7 +281,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
-              時間割・時限
+              時間割・生活
             </button>
             <button
               onClick={() => setActiveTab('sync')}
@@ -309,10 +321,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* メインコンテンツ */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-4">
             {/* =========================================================
-                タブ 0: 授業時間割・時限設定（1〜5 or 6限 & 昼休み）
+                タブ 0: 授業時間割・時限 & 睡眠時間設定（可処分時間の算出）
                ========================================================= */}
             {activeTab === 'timetable' && (
               <div className="space-y-4">
+                {/* 🛌 1日の睡眠時間設定（可処分時間算出用） */}
+                <div className="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/40 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 flex-shrink-0">
+                        <Moon className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                          1日の睡眠時間設定
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-900/80 text-indigo-300 font-normal">可処分時間計算用</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          24時間 - 睡眠時間 - 予定時間 = その日の「勉強可能時間」
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1.5 rounded-xl border border-indigo-500/40">
+                      <input
+                        type="number"
+                        min="0"
+                        max="24"
+                        step="0.5"
+                        value={tempSleepHours}
+                        onChange={(e) => setTempSleepHours(Math.max(0, Math.min(24, parseFloat(e.target.value) || 0)))}
+                        className="w-10 text-center text-xs font-bold text-indigo-200 bg-transparent focus:outline-none"
+                      />
+                      <span className="text-xs text-indigo-300/80 font-semibold">時間</span>
+                    </div>
+                  </div>
+
+                  {/* クイック目安ボタン */}
+                  <div className="flex items-center gap-1 pt-1 border-t border-indigo-900/40">
+                    <span className="text-[10px] text-slate-400 flex-shrink-0">クイック選択:</span>
+                    {[6, 6.5, 7, 7.5, 8].map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setTempSleepHours(h)}
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-semibold border transition-all ${
+                          tempSleepHours === h
+                            ? 'bg-indigo-600 border-indigo-400 text-white shadow-sm'
+                            : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {h}h{h === DEFAULT_SLEEP_HOURS ? ' (標準)' : ''}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* 説明 ＆ プリセット */}
                 <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/60 space-y-2.5">
                   <div className="flex items-center justify-between">
@@ -462,7 +526,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 transition-all active:scale-95"
                   >
                     <Save className="w-4 h-4" />
-                    時間割設定を保存する
+                    時間割・生活設定を保存する
                   </button>
                 </div>
               </div>

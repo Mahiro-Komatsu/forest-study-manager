@@ -16,6 +16,7 @@ import {
   Calendar as CalendarIcon,
   Layers,
   Settings,
+  Moon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { StudyTask, DailyLog, TimerState, StudyScheduleEvent, TimetableSettings } from '@/types/study';
@@ -32,7 +33,10 @@ import {
   saveSyncCodeToStorage,
   loadTimetableSettingsFromStorage,
   saveTimetableSettingsToStorage,
+  loadSleepHoursFromStorage,
+  saveSleepHoursToStorage,
   DEFAULT_TIMETABLE_SETTINGS,
+  DEFAULT_SLEEP_HOURS,
   INITIAL_TASKS,
   INITIAL_LOGS,
   INITIAL_EVENTS,
@@ -40,6 +44,8 @@ import {
   getUnitLabel,
   getTodayDateString,
   recalculateDailyTarget,
+  calculateDisposableTime,
+  formatMinutesToHours,
 } from '@/lib/storage';
 import { fetchCloudData, saveCloudData, isSupabaseConfigured } from '@/lib/supabase';
 import { TimerCircle } from './TimerCircle';
@@ -57,6 +63,7 @@ export const StudyDashboard: React.FC = () => {
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [events, setEvents] = useState<StudyScheduleEvent[]>([]);
   const [timetableSettings, setTimetableSettings] = useState<TimetableSettings>(DEFAULT_TIMETABLE_SETTINGS);
+  const [sleepHours, setSleepHours] = useState<number>(DEFAULT_SLEEP_HOURS);
   const [activeTaskId, setActiveTaskId] = useState<string>('');
   const [syncCode, setSyncCode] = useState<string>('');
   const [mode, setMode] = useState<'timer' | 'manual'>('timer');
@@ -144,6 +151,7 @@ export const StudyDashboard: React.FC = () => {
     const loadedLogs = loadLogsFromStorage();
     const loadedEvents = loadEventsFromStorage();
     const loadedTimetable = loadTimetableSettingsFromStorage();
+    const loadedSleepHours = loadSleepHoursFromStorage();
     const loadedActiveId = loadActiveTaskId(loadedTasks[0]?.id || '');
     const loadedSyncCode = loadSyncCodeFromStorage();
 
@@ -151,6 +159,7 @@ export const StudyDashboard: React.FC = () => {
     setLogs(loadedLogs);
     setEvents(loadedEvents);
     setTimetableSettings(loadedTimetable);
+    setSleepHours(loadedSleepHours);
     setActiveTaskId(loadedActiveId);
     setSyncCode(loadedSyncCode);
     setIsLoaded(true);
@@ -163,6 +172,11 @@ export const StudyDashboard: React.FC = () => {
   const handleUpdateTimetableSettings = (newSettings: TimetableSettings) => {
     setTimetableSettings(newSettings);
     saveTimetableSettingsToStorage(newSettings);
+  };
+
+  const handleUpdateSleepHours = (hours: number) => {
+    setSleepHours(hours);
+    saveSleepHoursToStorage(hours);
   };
 
   // タスク状態の保存 & クラウド反映
@@ -481,6 +495,8 @@ export const StudyDashboard: React.FC = () => {
   }
 
   const activeProgress = calculateTodayProgress(activeTask, logs);
+  const todayStr = getTodayDateString();
+  const todayDisposable = calculateDisposableTime(todayStr, events, logs, tasks, sleepHours);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between relative overflow-hidden select-none font-sans">
@@ -558,6 +574,28 @@ export const StudyDashboard: React.FC = () => {
           2. Center Stage（中央サークル・進行状況領域）
          ========================================================================= */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 my-2">
+        {/* ⏳ 本日の勉強可能時間（可処分時間）インジケーター */}
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => setIsCalendarModalOpen(true)}
+          className="mb-2 sm:mb-3 px-3.5 py-1.5 rounded-full bg-slate-900/80 hover:bg-slate-800/90 border border-emerald-700/50 hover:border-emerald-500/70 shadow-lg shadow-emerald-950/40 backdrop-blur-md transition-all flex items-center gap-2 group cursor-pointer text-xs"
+          title="クリックでカレンダーの予定・時間割を確認"
+        >
+          <div className="w-5 h-5 rounded-full bg-emerald-600/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 flex-shrink-0">
+            <Clock className="w-3 h-3 text-emerald-400" />
+          </div>
+          <span className="text-[11px] text-slate-300 font-medium">
+            本日の勉強可能時間:
+          </span>
+          <span className="text-xs font-bold text-emerald-300 tracking-wide">
+            {formatMinutesToHours(todayDisposable.availableMinutes)}
+          </span>
+          <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+            (睡眠{sleepHours}h / 予定{formatMinutesToHours(todayDisposable.eventsMinutes)})
+          </span>
+        </motion.button>
+
         <TimerCircle
           task={activeTask}
           progress={activeProgress}
@@ -708,7 +746,9 @@ export const StudyDashboard: React.FC = () => {
         logs={logs}
         events={events}
         timetableSettings={timetableSettings}
+        sleepHours={sleepHours}
         onUpdateTimetableSettings={handleUpdateTimetableSettings}
+        onUpdateSleepHours={handleUpdateSleepHours}
         onResetAllData={handleResetAllData}
         onImportData={handleImportData}
       />
@@ -720,6 +760,7 @@ export const StudyDashboard: React.FC = () => {
         logs={logs}
         events={events}
         timetableSettings={timetableSettings}
+        sleepHours={sleepHours}
         onAddEvent={handleAddEvent}
         onAddBatchEvents={handleAddBatchEvents}
         onDeleteEvent={handleDeleteEvent}
