@@ -413,3 +413,43 @@ export const formatMinutesToHours = (minutes: number): string => {
   return `${h}時間${m}分`;
 };
 
+/**
+ * 全データをデフォルト初期状態にリセット（消去）する
+ * - 科目: 初期デフォルト科目4つ（各進捗0）
+ * - ログ: 0件
+ * - 予定: 0件
+ * - 時間割: デフォルト大学90分6限
+ * - 睡眠時間: 7時間
+ */
+export const resetAllDataToDefault = () => {
+  saveTasksToStorage(INITIAL_TASKS);
+  saveLogsToStorage([]);
+  saveEventsToStorage([]);
+  saveTimetableSettingsToStorage(DEFAULT_TIMETABLE_SETTINGS);
+  saveSleepHoursToStorage(DEFAULT_SLEEP_HOURS);
+  saveActiveTaskId(INITIAL_TASKS[0]?.id || '');
+};
+
+/**
+ * データを完全に消去する（科目も予定もすべてクリアして空にする）
+ */
+export const clearAllDataCompletely = () => {
+  saveTasksToStorage([]);
+  saveLogsToStorage([]);
+  saveEventsToStorage([]);
+  saveTimetableSettingsToStorage(DEFAULT_TIMETABLE_SETTINGS);
+  saveSleepHoursToStorage(DEFAULT_SLEEP_HOURS);
+  saveActiveTaskId('');
+};
+
+/**
+ * 学習進捗ログ・記録のみを消去して0にする（科目と予定は維持）
+ */
+export const clearLogsOnly = (currentTasks: StudyTask[]): StudyTask[] => {
+  saveLogsToStorage([]);
+  const resetTasks = currentTasks.map((t) => ({ ...t, completedTotal: 0 }));
+  saveTasksToStorage(resetTasks);
+  return resetTasks;
+};
+
+

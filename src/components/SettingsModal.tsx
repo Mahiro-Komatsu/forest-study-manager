@@ -24,6 +24,8 @@ import {
   Save,
   Sparkles,
   Moon,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { StudyTask, DailyLog, StudyScheduleEvent, TimetableSettings } from '@/types/study';
@@ -43,7 +45,7 @@ interface SettingsModalProps {
   sleepHours: number;
   onUpdateTimetableSettings: (settings: TimetableSettings) => void;
   onUpdateSleepHours: (hours: number) => void;
-  onResetAllData: () => void;
+  onResetAllData: (mode?: 'default' | 'clear_all' | 'logs_only') => void;
   onImportData: (importedData: { tasks: StudyTask[]; logs: DailyLog[]; events: StudyScheduleEvent[] }) => void;
 }
 
@@ -303,7 +305,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <Database className="w-3.5 h-3.5" />
-              データ
+              データ・消去
             </button>
             <button
               onClick={() => setActiveTab('about')}
@@ -660,27 +662,124 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </label>
                 </div>
 
-                {/* データ初期化 */}
-                <div className="p-4 rounded-2xl bg-rose-950/20 border border-rose-900/40 space-y-2">
-                  <div className="font-semibold text-rose-300 text-xs flex items-center gap-1.5">
-                    <RotateCcw className="w-4 h-4 text-rose-400" />
-                    初期サンプルデータに戻す
+                {/* データの消去 ＆ デフォルト初期化 */}
+                <div className="p-4 rounded-2xl bg-rose-950/20 border border-rose-900/50 space-y-3.5">
+                  <div className="flex items-center justify-between pb-2 border-b border-rose-900/40">
+                    <div className="font-bold text-rose-300 text-xs flex items-center gap-1.5">
+                      <Trash2 className="w-4 h-4 text-rose-400" />
+                      データの消去 ＆ デフォルト初期化
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-900/60 text-rose-300 border border-rose-700/50 font-semibold">
+                      取り消し不可
+                    </span>
                   </div>
-                  <p className="text-[11px] text-rose-200/70 leading-relaxed">
-                    登録したタスクや進捗データをリセットし、デフォルトの初期状態に戻します。
+                  <p className="text-[11px] text-rose-200/80 leading-relaxed">
+                    端末に保存されている学習データやカレンダー予定、設定を消去・リセットします。目的の操作を選択してください。
                   </p>
-                  <button
-                    onClick={() => {
-                      if (confirm('すべてのデータを初期サンプル状態にリセットしますか？この操作は取り消せません。')) {
-                        onResetAllData();
-                        onClose();
-                      }
-                    }}
-                    className="py-2 px-3.5 rounded-xl bg-rose-900/50 hover:bg-rose-800 text-rose-200 text-xs font-semibold flex items-center gap-1.5 transition-all border border-rose-700/50"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    データを初期化する
-                  </button>
+
+                  <div className="space-y-2.5">
+                    {/* 1. デフォルト初期状態にリセット (推奨) */}
+                    <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-700/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                          デフォルト初期状態にリセット
+                        </div>
+                        <span className="text-[10px] text-emerald-400 font-semibold">推奨</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-normal">
+                        登録した予定や学習ログを全消去し、標準の科目（英語・数学等、進捗0）と基本設定（時間割・睡眠7h）に戻します。
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm('すべてのデータを消去し、初期デフォルト状態にリセットしますか？\n（科目・予定・学習履歴が初期化されます。この操作は取り消せません）')) {
+                            onResetAllData('default');
+                            setStatusMessage({
+                              type: 'success',
+                              text: 'データをデフォルト初期状態にリセットしました！',
+                            });
+                            setTimeout(() => {
+                              setStatusMessage(null);
+                              onClose();
+                            }, 1200);
+                          }
+                        }}
+                        className="w-full py-2 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 hover:border-emerald-500 text-emerald-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        デフォルトにリセット（消去初期化）
+                      </button>
+                    </div>
+
+                    {/* 2. すべてのデータを完全消去 */}
+                    <div className="p-3 rounded-xl bg-slate-900/80 border border-rose-900/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          すべてのデータを完全消去（空にする）
+                        </div>
+                        <span className="text-[10px] text-rose-400 font-semibold">全消去</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-normal">
+                        登録したすべての科目、カレンダー予定、学習履歴を完全に消去して空にします。一から自分で登録したい場合に便利です。
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm('本当にすべてのデータを完全に消去しますか？\n（すべての科目・予定・ログが消去され、空になります。この操作は取り消せません）')) {
+                            onResetAllData('clear_all');
+                            setStatusMessage({
+                              type: 'success',
+                              text: 'すべてのデータを完全消去しました。',
+                            });
+                            setTimeout(() => {
+                              setStatusMessage(null);
+                              onClose();
+                            }, 1200);
+                          }
+                        }}
+                        className="w-full py-2 px-3 rounded-lg bg-rose-900/40 hover:bg-rose-800 border border-rose-700/60 text-rose-200 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        すべてのデータを完全消去する
+                      </button>
+                    </div>
+
+                    {/* 3. 学習記録・実績のみ消去 */}
+                    <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-700/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-400" />
+                          学習記録・実績のみ消去（進捗を0クリア）
+                        </div>
+                        <span className="text-[10px] text-amber-400 font-semibold">ログ消去</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-normal">
+                        作成した科目や予定はそのまま残し、誤入力した本日の学習時間やこれまでの消化実績ログのみを消去して0に戻します。
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm('これまでの学習記録・ログのみを消去して0に戻しますか？\n（科目やカレンダー予定はそのまま維持されます）')) {
+                            onResetAllData('logs_only');
+                            setStatusMessage({
+                              type: 'success',
+                              text: '学習進捗と記録ログを消去しました！',
+                            });
+                            setTimeout(() => {
+                              setStatusMessage(null);
+                              onClose();
+                            }, 1200);
+                          }
+                        }}
+                        className="w-full py-2 px-3 rounded-lg bg-amber-600/20 hover:bg-amber-600/80 border border-amber-500/40 hover:border-amber-500 text-amber-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        学習記録・ログのみ消去する
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

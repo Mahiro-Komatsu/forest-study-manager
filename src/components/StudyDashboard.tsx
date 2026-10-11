@@ -46,6 +46,9 @@ import {
   recalculateDailyTarget,
   calculateDisposableTime,
   formatMinutesToHours,
+  resetAllDataToDefault,
+  clearAllDataCompletely,
+  clearLogsOnly,
 } from '@/lib/storage';
 import { fetchCloudData, saveCloudData, isSupabaseConfigured } from '@/lib/supabase';
 import { TimerCircle } from './TimerCircle';
@@ -388,16 +391,32 @@ export const StudyDashboard: React.FC = () => {
     );
   };
 
-  // 全データ初期化リセット
-  const handleResetAllData = () => {
-    setTasks(INITIAL_TASKS);
-    setLogs(INITIAL_LOGS);
-    setEvents(INITIAL_EVENTS);
-    setActiveTaskId(INITIAL_TASKS[0]?.id || '');
-    saveTasksToStorage(INITIAL_TASKS);
-    saveLogsToStorage(INITIAL_LOGS);
-    saveEventsToStorage(INITIAL_EVENTS);
-    saveActiveTaskId(INITIAL_TASKS[0]?.id || '');
+  // 全データ初期化・消去リセット
+  const handleResetAllData = (mode: 'default' | 'clear_all' | 'logs_only' = 'default') => {
+    if (mode === 'default') {
+      // 1. デフォルト初期状態にリセット（初期科目4つ、進捗0、予定0、初期時間割・睡眠7h）
+      resetAllDataToDefault();
+      setTasks(INITIAL_TASKS);
+      setLogs([]);
+      setEvents([]);
+      setTimetableSettings(DEFAULT_TIMETABLE_SETTINGS);
+      setSleepHours(DEFAULT_SLEEP_HOURS);
+      setActiveTaskId(INITIAL_TASKS[0]?.id || '');
+    } else if (mode === 'clear_all') {
+      // 2. 完全消去（科目も予定もすべてクリアして空にする）
+      clearAllDataCompletely();
+      setTasks([]);
+      setLogs([]);
+      setEvents([]);
+      setTimetableSettings(DEFAULT_TIMETABLE_SETTINGS);
+      setSleepHours(DEFAULT_SLEEP_HOURS);
+      setActiveTaskId('');
+    } else if (mode === 'logs_only') {
+      // 3. 学習進捗ログ・実績のみ消去（科目は維持して消化量0にリセット）
+      setLogs([]);
+      const updatedTasks = clearLogsOnly(tasks);
+      setTasks(updatedTasks);
+    }
   };
 
   // データインポート復元
