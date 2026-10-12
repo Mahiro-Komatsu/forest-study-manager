@@ -688,7 +688,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span className="text-[10px] text-emerald-400 font-semibold">消去リセット</span>
                       </div>
                       <p className="text-[10px] text-slate-400 leading-normal">
-                        登録した予定や学習記録を消去し、標準の初期状態（基本4科目、学習時間0、予定0件、初期時間割・睡眠7h）に戻します。
+                        登録した予定や学習記録を消去し、標準の初期状態（基本1科目「ここに科目名を入力」、学習時間0、予定0件、初期時間割・睡眠7h）に戻します。
                       </p>
                       <button
                         type="button"

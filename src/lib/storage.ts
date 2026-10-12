@@ -121,57 +121,18 @@ export const getFutureDate = (days: number): string => {
   return d.toISOString().split('T')[0];
 };
 
-// オーソドックスな初期タスクデータ（初期学習時間は0からスタート）
+// デフォルトの初期タスクデータ（案内用の1科目のみ、学習時間は0）
 export const INITIAL_TASKS: StudyTask[] = [
   {
     id: 'task-1',
-    title: '英語学習（英単語・リスニング）',
-    category: '語学・英語',
+    title: 'ここに科目名を入力（タップして編集）',
+    category: '学習科目',
     color: '#22c55e', // Forest green
     unit: 'minutes',
     totalQuota: 600,
     dailyTarget: 30,
     completedTotal: 0,
-    deadline: getFutureDate(14),
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  },
-  {
-    id: 'task-2',
-    title: '数学（基礎問題演習）',
-    category: '数学・理数',
-    color: '#3b82f6', // Ocean Blue
-    unit: 'problems',
-    totalQuota: 100,
-    dailyTarget: 10,
-    completedTotal: 0,
-    deadline: getFutureDate(21),
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  },
-  {
-    id: 'task-3',
-    title: '読書・参考書（教養・専門書）',
-    category: '読書',
-    color: '#f59e0b', // Amber
-    unit: 'pages',
-    totalQuota: 200,
-    dailyTarget: 15,
-    completedTotal: 0,
-    deadline: getFutureDate(28),
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  },
-  {
-    id: 'task-4',
-    title: '資格試験対策（過去問演習）',
-    category: '資格・IT',
-    color: '#a855f7', // Purple
-    unit: 'minutes',
-    totalQuota: 900,
-    dailyTarget: 45,
-    completedTotal: 0,
-    deadline: getFutureDate(14),
+    deadline: getFutureDate(30),
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
@@ -228,23 +189,16 @@ export const loadTasksFromStorage = (): StudyTask[] => {
       saveTasksToStorage(INITIAL_TASKS);
       return INITIAL_TASKS;
     }
-    // 初期サンプルの古い累計時間（completedTotal: 150など）が入っている場合は0に補正
-    const hasOldSampleTotals = parsed.some(
-      (t) =>
-        (t.id === 'task-1' && t.completedTotal === 150) ||
-        (t.id === 'task-2' && t.completedTotal === 35) ||
-        (t.id === 'task-3' && t.completedTotal === 50) ||
-        (t.id === 'task-4' && t.completedTotal === 200)
-    );
-    if (hasOldSampleTotals) {
-      const cleaned = parsed.map((t) => {
-        if (['task-1', 'task-2', 'task-3', 'task-4'].includes(t.id)) {
-          return { ...t, completedTotal: 0 };
-        }
-        return t;
-      });
-      saveTasksToStorage(cleaned);
-      return cleaned;
+    // 古いデフォルト4科目（英語、数学、読書、資格対策）のまま残っている場合は新しい1科目に更新
+    const isOldDefaultFourTasks =
+      parsed.length === 4 &&
+      parsed.some((t) => t.id === 'task-1' && (t.title.includes('英語学習') || t.title.includes('英語'))) &&
+      parsed.some((t) => t.id === 'task-2' && (t.title.includes('数学') || t.title.includes('数学・理数')));
+
+    if (isOldDefaultFourTasks) {
+      saveTasksToStorage(INITIAL_TASKS);
+      saveActiveTaskId(INITIAL_TASKS[0].id);
+      return INITIAL_TASKS;
     }
     return parsed;
   } catch {
