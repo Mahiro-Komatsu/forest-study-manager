@@ -1,4 +1,4 @@
-import { StudyTask, DailyLog, TaskDayProgress, StudyScheduleEvent, DisposableTimeInfo } from '@/types/study';
+import { StudyTask, DailyLog, TaskDayProgress, StudyScheduleEvent, DisposableTimeInfo, NotificationSettings } from '@/types/study';
 
 export const STORAGE_KEYS = {
   TASKS: 'forest_study_tasks_v2',
@@ -8,6 +8,14 @@ export const STORAGE_KEYS = {
   SLEEP_HOURS: 'forest_study_sleep_hours_v2',
   ACTIVE_TASK_ID: 'forest_study_active_id_v2',
   SYNC_CODE: 'forest_study_sync_code_v2',
+  NOTIFICATIONS: 'forest_study_notifications_v2',
+};
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  enabled: false,
+  reminderTime: '20:00',
+  timerCompletionNotice: true,
+  soundEnabled: true,
 };
 
 export const DEFAULT_SLEEP_HOURS = 7;
@@ -103,6 +111,28 @@ export const loadSyncCodeFromStorage = (): string => {
 export const saveSyncCodeToStorage = (code: string) => {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEYS.SYNC_CODE, code.toUpperCase().trim());
+};
+
+// LocalStorage から通知設定を取得
+export const loadNotificationSettingsFromStorage = (): NotificationSettings => {
+  if (typeof window === 'undefined') return DEFAULT_NOTIFICATION_SETTINGS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (!raw) return DEFAULT_NOTIFICATION_SETTINGS;
+    return { ...DEFAULT_NOTIFICATION_SETTINGS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_NOTIFICATION_SETTINGS;
+  }
+};
+
+// LocalStorage に通知設定を保存
+export const saveNotificationSettingsToStorage = (settings: NotificationSettings) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(settings));
+  } catch (err) {
+    console.error('Failed to save notification settings to localStorage:', err);
+  }
 };
 
 // 今日の日付 (YYYY-MM-DD)

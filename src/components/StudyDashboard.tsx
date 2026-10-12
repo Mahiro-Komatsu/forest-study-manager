@@ -19,7 +19,7 @@ import {
   Moon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { StudyTask, DailyLog, TimerState, StudyScheduleEvent, TimetableSettings } from '@/types/study';
+import { StudyTask, DailyLog, TimerState, StudyScheduleEvent, TimetableSettings, NotificationSettings } from '@/types/study';
 import {
   loadTasksFromStorage,
   saveTasksToStorage,
@@ -35,8 +35,11 @@ import {
   saveTimetableSettingsToStorage,
   loadSleepHoursFromStorage,
   saveSleepHoursToStorage,
+  loadNotificationSettingsFromStorage,
+  saveNotificationSettingsToStorage,
   DEFAULT_TIMETABLE_SETTINGS,
   DEFAULT_SLEEP_HOURS,
+  DEFAULT_NOTIFICATION_SETTINGS,
   INITIAL_TASKS,
   INITIAL_LOGS,
   INITIAL_EVENTS,
@@ -50,6 +53,10 @@ import {
   clearAllDataCompletely,
   clearLogsOnly,
 } from '@/lib/storage';
+import {
+  sendDailyQuotaNotification,
+  sendTimerFinishedNotification,
+} from '@/lib/notifications';
 import { fetchCloudData, saveCloudData, isSupabaseConfigured } from '@/lib/supabase';
 import { TimerCircle } from './TimerCircle';
 import { TaskSelectModal } from './TaskSelectModal';
@@ -67,6 +74,7 @@ export const StudyDashboard: React.FC = () => {
   const [events, setEvents] = useState<StudyScheduleEvent[]>([]);
   const [timetableSettings, setTimetableSettings] = useState<TimetableSettings>(DEFAULT_TIMETABLE_SETTINGS);
   const [sleepHours, setSleepHours] = useState<number>(DEFAULT_SLEEP_HOURS);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const [activeTaskId, setActiveTaskId] = useState<string>('');
   const [syncCode, setSyncCode] = useState<string>('');
   const [mode, setMode] = useState<'timer' | 'manual'>('timer');
@@ -155,6 +163,7 @@ export const StudyDashboard: React.FC = () => {
     const loadedEvents = loadEventsFromStorage();
     const loadedTimetable = loadTimetableSettingsFromStorage();
     const loadedSleepHours = loadSleepHoursFromStorage();
+    const loadedNotifications = loadNotificationSettingsFromStorage();
     const loadedActiveId = loadActiveTaskId(loadedTasks[0]?.id || '');
     const loadedSyncCode = loadSyncCodeFromStorage();
 
@@ -163,6 +172,7 @@ export const StudyDashboard: React.FC = () => {
     setEvents(loadedEvents);
     setTimetableSettings(loadedTimetable);
     setSleepHours(loadedSleepHours);
+    setNotificationSettings(loadedNotifications);
     setActiveTaskId(loadedActiveId);
     setSyncCode(loadedSyncCode);
     setIsLoaded(true);
@@ -181,6 +191,44 @@ export const StudyDashboard: React.FC = () => {
     setSleepHours(hours);
     saveSleepHoursToStorage(hours);
   };
+
+  const handleUpdateNotificationSettings = (newSettings: NotificationSettings) => {
+    setNotificationSettings(newSettings);
+    saveNotificationSettingsToStorage(newSettings);
+  };
+
+  // 毎日のノルマ定時リマインダー監視
+  useEffect(() => {
+    if (!isLoaded || !notificationSettings.enabled) return;
+
+    const checkDailyReminder = () => {
+      const now = new Date();
+      const currentHours = String(now.getHours()).padStart(2, '0');
+      const currentMinutes = String(now.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentHours}:${currentMinutes}`;
+      const todayStr = getTodayDateString();
+
+      // 設定時刻以降で、本日まだ通知していない場合に送信
+      if (
+        currentTimeStr >= notificationSettings.reminderTime &&
+        notificationSettings.lastNotifiedDate !== todayStr
+      ) {
+        sendDailyQuotaNotification(tasks, logs, events, sleepHours, false);
+        const updated = {
+          ...notificationSettings,
+          lastNotifiedDate: todayStr,
+        };
+        setNotificationSettings(updated);
+        saveNotificationSettingsToStorage(updated);
+      }
+    };
+
+    // 初回マウント時および30秒ごとに定時チェック
+    checkDailyReminder();
+    const intervalId = setInterval(checkDailyReminder, 30 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [isLoaded, notificationSettings, tasks, logs, events, sleepHours]);
 
   // タスク状態の保存 & クラウド反映
   useEffect(() => {
@@ -279,6 +327,11 @@ export const StudyDashboard: React.FC = () => {
           : t
       )
     );
+
+    // タイマー完了通知
+    if (notificationSettings.timerCompletionNotice) {
+      sendTimerFinishedNotification(activeTask.title, minutes);
+    }
 
     // 祝賀エフェクト
     confetti({
@@ -761,8 +814,10 @@ export const StudyDashboard: React.FC = () => {
         events={events}
         timetableSettings={timetableSettings}
         sleepHours={sleepHours}
+        notificationSettings={notificationSettings}
         onUpdateTimetableSettings={handleUpdateTimetableSettings}
         onUpdateSleepHours={handleUpdateSleepHours}
+        onUpdateNotificationSettings={handleUpdateNotificationSettings}
         onResetAllData={handleResetAllData}
         onImportData={handleImportData}
       />

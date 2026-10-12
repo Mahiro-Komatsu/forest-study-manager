@@ -26,10 +26,21 @@ import {
   Moon,
   Trash2,
   AlertTriangle,
+  Bell,
+  BellRing,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { StudyTask, DailyLog, StudyScheduleEvent, TimetableSettings } from '@/types/study';
-import { DEFAULT_TIMETABLE_SETTINGS, DEFAULT_SLEEP_HOURS } from '@/lib/storage';
+import { StudyTask, DailyLog, StudyScheduleEvent, TimetableSettings, NotificationSettings } from '@/types/study';
+import { DEFAULT_TIMETABLE_SETTINGS, DEFAULT_SLEEP_HOURS, DEFAULT_NOTIFICATION_SETTINGS, formatMinutesToHours } from '@/lib/storage';
+import {
+  isNotificationSupported,
+  getNotificationPermission,
+  requestNotificationPermission,
+  sendDailyQuotaNotification,
+  getDailyQuotaSummary,
+} from '@/lib/notifications';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -43,8 +54,10 @@ interface SettingsModalProps {
   events: StudyScheduleEvent[];
   timetableSettings: TimetableSettings;
   sleepHours: number;
+  notificationSettings?: NotificationSettings;
   onUpdateTimetableSettings: (settings: TimetableSettings) => void;
   onUpdateSleepHours: (hours: number) => void;
+  onUpdateNotificationSettings: (settings: NotificationSettings) => void;
   onResetAllData: (mode?: 'default' | 'clear_all' | 'logs_only') => void;
   onImportData: (importedData: { tasks: StudyTask[]; logs: DailyLog[]; events: StudyScheduleEvent[] }) => void;
 }
@@ -61,12 +74,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   events,
   timetableSettings,
   sleepHours = DEFAULT_SLEEP_HOURS,
+  notificationSettings = DEFAULT_NOTIFICATION_SETTINGS,
   onUpdateTimetableSettings,
   onUpdateSleepHours,
+  onUpdateNotificationSettings,
   onResetAllData,
   onImportData,
 }) => {
-  const [activeTab, setActiveTab] = useState<'timetable' | 'sync' | 'data' | 'about'>('timetable');
+  const [activeTab, setActiveTab] = useState<'timetable' | 'notifications' | 'sync' | 'data' | 'about'>('timetable');
   const [inputCode, setInputCode] = useState('');
   const [isCopied, setIsCopied] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -75,7 +90,81 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [tempTimetable, setTempTimetable] = useState<TimetableSettings>(timetableSettings);
   const [tempSleepHours, setTempSleepHours] = useState<number>(sleepHours);
 
+  // 通知設定のローカル編集用ステート
+  const [tempNotifications, setTempNotifications] = useState<NotificationSettings>(notificationSettings);
+  const [permissionState, setPermissionState] = useState<NotificationPermission>('default');
+  const [isTestingNotification, setIsTestingNotification] = useState(false);
+
+  // コンポーネント表示時に最新の通知許可状態を取得
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPermissionState(getNotificationPermission());
+    }
+  }, [isOpen]);
+
+  // props が変わった時にローカルステートを同期
+  React.useEffect(() => {
+    setTempNotifications(notificationSettings);
+  }, [notificationSettings]);
+
   if (!isOpen) return null;
+
+  // 通知権限の許可をブラウザにリクエスト
+  const handleRequestPermission = async () => {
+    const res = await requestNotificationPermission();
+    setPermissionState(res);
+    if (res === 'granted') {
+      const updated = { ...tempNotifications, enabled: true };
+      setTempNotifications(updated);
+      onUpdateNotificationSettings(updated);
+      setStatusMessage({
+        type: 'success',
+        text: 'ブラウザ通知が許可されました！毎日のノルマ通知を受け取れます。',
+      });
+    } else if (res === 'denied') {
+      setStatusMessage({
+        type: 'error',
+        text: '通知がブロックされています。ブラウザのアドレスバーの鍵アイコンから通知を許可してください。',
+      });
+    }
+  };
+
+  // 通知設定の保存
+  const handleSaveNotifications = () => {
+    onUpdateNotificationSettings(tempNotifications);
+    setStatusMessage({
+      type: 'success',
+      text: '通知設定を保存しました！',
+    });
+    setTimeout(() => {
+      setStatusMessage(null);
+    }, 2500);
+  };
+
+  // テスト通知の送信
+  const handleSendTestNotification = async () => {
+    if (permissionState !== 'granted') {
+      const res = await requestNotificationPermission();
+      setPermissionState(res);
+      if (res !== 'granted') {
+        setStatusMessage({
+          type: 'error',
+          text: '通知が許可されていないため、テスト通知を送信できませんでした。',
+        });
+        return;
+      }
+    }
+
+    setIsTestingNotification(true);
+    sendDailyQuotaNotification(tasks, logs, events, tempSleepHours, true);
+    setStatusMessage({
+      type: 'success',
+      text: 'テスト通知を送信しました！デスクトップや画面右上に通知が表示されたかご確認ください。',
+    });
+    setTimeout(() => {
+      setIsTestingNotification(false);
+    }, 2000);
+  };
 
   // 同期コードコピー
   const handleCopy = () => {
@@ -273,50 +362,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* 設定タブナビゲーション */}
-          <div className="flex items-center gap-1 p-1 bg-slate-950/60 rounded-2xl border border-slate-800 mb-3.5 flex-shrink-0">
+          <div className="flex items-center gap-1 p-1 bg-slate-950/60 rounded-2xl border border-slate-800 mb-3.5 flex-shrink-0 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('timetable')}
-              className={`flex-1 py-1.5 sm:py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`flex-1 min-w-[70px] py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'timetable'
                   ? 'bg-emerald-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <GraduationCap className="w-3.5 h-3.5" />
-              時間割・生活
+              <GraduationCap className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap">時間割</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={`flex-1 min-w-[70px] py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+                activeTab === 'notifications'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap">通知</span>
             </button>
             <button
               onClick={() => setActiveTab('sync')}
-              className={`flex-1 py-1.5 sm:py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`flex-1 min-w-[60px] py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'sync'
                   ? 'bg-emerald-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Cloud className="w-3.5 h-3.5" />
-              同期
+              <Cloud className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap">同期</span>
             </button>
             <button
               onClick={() => setActiveTab('data')}
-              className={`flex-1 py-1.5 sm:py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`flex-1 min-w-[60px] py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'data'
                   ? 'bg-emerald-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Database className="w-3.5 h-3.5" />
-              データ・消去
+              <Database className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap">データ</span>
             </button>
             <button
               onClick={() => setActiveTab('about')}
-              className={`flex-1 py-1.5 sm:py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+              className={`flex-1 min-w-[60px] py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                 activeTab === 'about'
                   ? 'bg-emerald-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Info className="w-3.5 h-3.5" />
-              情報
+              <Info className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap">情報</span>
             </button>
           </div>
 
@@ -529,6 +629,234 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   >
                     <Save className="w-4 h-4" />
                     時間割・生活設定を保存する
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* =========================================================
+                タブ: 通知・ノルマ設定
+               ========================================================= */}
+            {activeTab === 'notifications' && (
+              <div className="space-y-4">
+                {/* ブラウザ通知権限カード */}
+                <div className="p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs font-bold text-white">ブラウザ通知の許可状態</span>
+                    </div>
+                    {permissionState === 'granted' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        許可済み
+                      </span>
+                    ) : permissionState === 'denied' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                        ブロック中
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        未許可
+                      </span>
+                    )}
+                  </div>
+
+                  {permissionState === 'granted' ? (
+                    <p className="text-[11px] text-emerald-300/90">
+                      ✓ ブラウザ通知が許可されています。定時リマインダーやタイマー完了通知が正常に届きます。
+                    </p>
+                  ) : permissionState === 'denied' ? (
+                    <div className="text-[11px] text-rose-300 space-y-1">
+                      <p>⚠️ 通知がブラウザによってブロックされています。</p>
+                      <p className="text-slate-400 text-[10px]">
+                        通知を受け取るには、ブラウザのURLアドレスバー左側の鍵アイコン（またはサイト設定）をクリックし、「通知」を「許可」に変更してください。
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-[11px] text-slate-300 mb-2.5">
+                        毎日のノルマ通知やタイマー終了の通知を受け取るには、ブラウザの通知許可が必要です。
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleRequestPermission}
+                        className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
+                      >
+                        <BellRing className="w-3.5 h-3.5" />
+                        ブラウザ通知を許可する
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 毎日のノルマ通知設定 */}
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                        毎日のノルマ通知（定時リマインダー）
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        毎日指定の時刻に、今日の未達成ノルマと残り可能時間をお知らせします
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={tempNotifications.enabled}
+                        onChange={(e) =>
+                          setTempNotifications({ ...tempNotifications, enabled: e.target.checked })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {/* 通知時刻の選択 */}
+                  {tempNotifications.enabled && (
+                    <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-xs text-slate-300 font-medium">通知を届ける時刻</span>
+                      </div>
+                      <input
+                        type="time"
+                        value={tempNotifications.reminderTime}
+                        onChange={(e) =>
+                          setTempNotifications({ ...tempNotifications, reminderTime: e.target.value })
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* その他の通知オプション */}
+                <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/60 space-y-3">
+                  {/* タイマー完了通知 */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                        タイマー完了通知
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        勉強タイマー終了時にデスクトップ/ブラウザ通知でお知らせ
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={tempNotifications.timerCompletionNotice}
+                        onChange={(e) =>
+                          setTempNotifications({
+                            ...tempNotifications,
+                            timerCompletionNotice: e.target.checked,
+                          })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {/* 通知チャイム音 */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-700/60">
+                    <div>
+                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                        通知チャイム音
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        通知受信時に心地よいチャイム音（ポロン♪）を再生
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={tempNotifications.soundEnabled}
+                        onChange={(e) =>
+                          setTempNotifications({
+                            ...tempNotifications,
+                            soundEnabled: e.target.checked,
+                          })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 通知プレビュー＆テスト送信 */}
+                <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-emerald-400" />
+                      届く通知のプレビュー（現在の状況）
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleSendTestNotification}
+                      disabled={isTestingNotification}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-semibold text-emerald-300 hover:text-emerald-200 flex items-center gap-1 transition-all disabled:opacity-50"
+                    >
+                      <BellRing className="w-3 h-3" />
+                      {isTestingNotification ? '送信中...' : 'テスト通知を送る'}
+                    </button>
+                  </div>
+
+                  {/* プレビュー吹き出し */}
+                  {(() => {
+                    const preview = getDailyQuotaSummary(tasks, logs, events, tempSleepHours);
+                    return (
+                      <div className="p-3 rounded-xl bg-slate-900 border border-emerald-900/40 text-xs space-y-1 font-sans">
+                        <div className="font-bold text-emerald-400 flex items-center gap-1">
+                          <span>🌲 今日の学習ノルマ</span>
+                          <span className="text-[10px] text-slate-500 font-normal">・ 学習管理の要</span>
+                        </div>
+                        {preview.totalCount === 0 ? (
+                          <div className="text-slate-400 text-[11px]">登録されている科目がありません。</div>
+                        ) : preview.isAllCompleted ? (
+                          <div className="text-emerald-200 text-[11px]">
+                            🎉 本日のすべての科目（全{preview.totalCount}科目）のノルマを達成しました！
+                          </div>
+                        ) : (
+                          <div className="text-slate-300 text-[11px] space-y-0.5">
+                            <div className="text-slate-400">
+                              本日の残りノルマ ({preview.completedCount}/{preview.totalCount} 完了):
+                            </div>
+                            {preview.pendingTasks.slice(0, 3).map((item, i) => (
+                              <div key={i} className="pl-1 text-slate-200">
+                                ・{item.taskName}: あと <span className="text-amber-400 font-medium">{item.remainingToday}</span> {item.unitLabel}
+                              </div>
+                            ))}
+                            {preview.pendingTasks.length > 3 && (
+                              <div className="pl-1 text-slate-500 text-[10px]">
+                                ...他 {preview.pendingTasks.length - 3} 科目
+                              </div>
+                            )}
+                            <div className="pt-1 text-emerald-400 text-[10px] font-medium">
+                              🕒 残り勉強可能時間: {formatMinutesToHours(preview.disposableTime.remainingAvailableMinutes)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* 保存ボタン */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveNotifications}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                  >
+                    <Save className="w-4 h-4" />
+                    通知設定を保存する
                   </button>
                 </div>
               </div>

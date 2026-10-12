@@ -99,3 +99,12 @@ export interface DisposableTimeInfo {
   remainingAvailableMinutes: number; // 残り勉強可能時間 = max(0, availableMinutes - studiedMinutes)
 }
 
+export interface NotificationSettings {
+  enabled: boolean; // リマインダー通知が有効か
+  reminderTime: string; // 通知時刻 'HH:mm'（デフォルト '20:00'）
+  timerCompletionNotice: boolean; // タイマー終了時に通知するか
+  soundEnabled: boolean; // 通知音を鳴らすか
+  lastNotifiedDate?: string; // 最後にノルマ通知を送信した日付 'YYYY-MM-DD'
+}
+
+
