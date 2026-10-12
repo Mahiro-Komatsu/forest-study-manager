@@ -215,18 +215,8 @@ export const StudyDashboard: React.FC = () => {
     saveActiveTaskId(activeTaskId);
   }, [activeTaskId, isLoaded]);
 
-  // 現在のアクティブタスク（空の場合は安全にINITIAL_TASKS[0]をフォールバック）
+  // 現在のアクティブタスク
   const activeTask = tasks.find((t) => t.id === activeTaskId) || tasks[0] || INITIAL_TASKS[0];
-
-  // タスクが空になった場合の安全な自動修復（読み込みループ防止）
-  useEffect(() => {
-    if (isLoaded && tasks.length === 0) {
-      setTasks(INITIAL_TASKS);
-      setActiveTaskId(INITIAL_TASKS[0]?.id || '');
-      saveTasksToStorage(INITIAL_TASKS);
-      saveActiveTaskId(INITIAL_TASKS[0]?.id || '');
-    }
-  }, [isLoaded, tasks.length]);
 
   // タイマー処理
   useEffect(() => {
@@ -354,8 +344,12 @@ export const StudyDashboard: React.FC = () => {
     setActiveTaskId(newTask.id);
   };
 
-  // タスク削除
+  // タスク削除（最低1科目以上を維持）
   const handleDeleteTask = (taskId: string) => {
+    if (tasks.length <= 1) {
+      alert('科目は最低1科目以上登録されている必要があります。\nすべての科目を削除することはできません。内容を変更したい場合は「編集」をご利用ください。');
+      return;
+    }
     const nextTasks = tasks.filter((t) => t.id !== taskId);
     setTasks(nextTasks);
     if (activeTaskId === taskId && nextTasks.length > 0) {

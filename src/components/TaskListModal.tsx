@@ -166,12 +166,20 @@ export const TaskListModal: React.FC<TaskListModalProps> = ({
 
                         <button
                           onClick={() => {
+                            if (tasks.length <= 1) {
+                              alert('科目は最低1科目以上登録されている必要があります。\nすべての科目を削除することはできません。内容を変更したい場合は「編集」ボタンをご利用ください。');
+                              return;
+                            }
                             if (confirm(`「${task.title}」を削除しますか？`)) {
                               onDeleteTask(task.id);
                             }
                           }}
-                          title="タスクを削除"
-                          className="p-1.5 rounded-lg bg-slate-700/50 hover:bg-red-950/60 text-slate-400 hover:text-red-400 transition-colors"
+                          title={tasks.length <= 1 ? '科目は最低1科目必要です（削除不可）' : 'タスクを削除'}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            tasks.length <= 1
+                              ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                              : 'bg-slate-700/50 hover:bg-red-950/60 text-slate-400 hover:text-red-400'
+                          }`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
