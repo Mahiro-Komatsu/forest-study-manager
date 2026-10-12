@@ -223,6 +223,11 @@ export const loadTasksFromStorage = (): StudyTask[] => {
       return INITIAL_TASKS;
     }
     const parsed: StudyTask[] = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      // タスクが0件の場合は初期標準タスク（学習時間0）を自動復元してアプリを安全に起動
+      saveTasksToStorage(INITIAL_TASKS);
+      return INITIAL_TASKS;
+    }
     // 初期サンプルの古い累計時間（completedTotal: 150など）が入っている場合は0に補正
     const hasOldSampleTotals = parsed.some(
       (t) =>
@@ -431,15 +436,10 @@ export const resetAllDataToDefault = () => {
 };
 
 /**
- * データを完全に消去する（科目も予定もすべてクリアして空にする）
+ * データを初期デフォルト状態に消去・リセットする
  */
 export const clearAllDataCompletely = () => {
-  saveTasksToStorage([]);
-  saveLogsToStorage([]);
-  saveEventsToStorage([]);
-  saveTimetableSettingsToStorage(DEFAULT_TIMETABLE_SETTINGS);
-  saveSleepHoursToStorage(DEFAULT_SLEEP_HOURS);
-  saveActiveTaskId('');
+  resetAllDataToDefault();
 };
 
 /**

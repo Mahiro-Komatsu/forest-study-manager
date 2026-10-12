@@ -215,8 +215,18 @@ export const StudyDashboard: React.FC = () => {
     saveActiveTaskId(activeTaskId);
   }, [activeTaskId, isLoaded]);
 
-  // 現在のアクティブタスク
-  const activeTask = tasks.find((t) => t.id === activeTaskId) || tasks[0];
+  // 現在のアクティブタスク（空の場合は安全にINITIAL_TASKS[0]をフォールバック）
+  const activeTask = tasks.find((t) => t.id === activeTaskId) || tasks[0] || INITIAL_TASKS[0];
+
+  // タスクが空になった場合の安全な自動修復（読み込みループ防止）
+  useEffect(() => {
+    if (isLoaded && tasks.length === 0) {
+      setTasks(INITIAL_TASKS);
+      setActiveTaskId(INITIAL_TASKS[0]?.id || '');
+      saveTasksToStorage(INITIAL_TASKS);
+      saveActiveTaskId(INITIAL_TASKS[0]?.id || '');
+    }
+  }, [isLoaded, tasks.length]);
 
   // タイマー処理
   useEffect(() => {
@@ -393,8 +403,8 @@ export const StudyDashboard: React.FC = () => {
 
   // 全データ初期化・消去リセット
   const handleResetAllData = (mode: 'default' | 'clear_all' | 'logs_only' = 'default') => {
-    if (mode === 'default') {
-      // 1. デフォルト初期状態にリセット（初期科目4つ、進捗0、予定0、初期時間割・睡眠7h）
+    if (mode === 'default' || mode === 'clear_all') {
+      // デフォルト初期状態にリセット（初期科目4つ、進捗0、予定0、初期時間割・睡眠7h）
       resetAllDataToDefault();
       setTasks(INITIAL_TASKS);
       setLogs([]);
@@ -402,17 +412,8 @@ export const StudyDashboard: React.FC = () => {
       setTimetableSettings(DEFAULT_TIMETABLE_SETTINGS);
       setSleepHours(DEFAULT_SLEEP_HOURS);
       setActiveTaskId(INITIAL_TASKS[0]?.id || '');
-    } else if (mode === 'clear_all') {
-      // 2. 完全消去（科目も予定もすべてクリアして空にする）
-      clearAllDataCompletely();
-      setTasks([]);
-      setLogs([]);
-      setEvents([]);
-      setTimetableSettings(DEFAULT_TIMETABLE_SETTINGS);
-      setSleepHours(DEFAULT_SLEEP_HOURS);
-      setActiveTaskId('');
     } else if (mode === 'logs_only') {
-      // 3. 学習進捗ログ・実績のみ消去（科目は維持して消化量0にリセット）
+      // 学習進捗ログ・実績のみ消去（科目は維持して消化量0にリセット）
       setLogs([]);
       const updatedTasks = clearLogsOnly(tasks);
       setTasks(updatedTasks);
@@ -502,7 +503,7 @@ export const StudyDashboard: React.FC = () => {
     );
   };
 
-  if (!isLoaded || !activeTask) {
+  if (!isLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-emerald-400">
         <div className="flex items-center gap-3">

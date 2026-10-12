@@ -683,17 +683,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-center justify-between">
                         <div className="text-xs font-bold text-white flex items-center gap-1.5">
                           <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-                          デフォルト初期状態にリセット
+                          データをデフォルト初期状態に戻す
                         </div>
-                        <span className="text-[10px] text-emerald-400 font-semibold">推奨</span>
+                        <span className="text-[10px] text-emerald-400 font-semibold">消去リセット</span>
                       </div>
                       <p className="text-[10px] text-slate-400 leading-normal">
-                        登録した予定や学習ログを全消去し、標準の科目（英語・数学等、進捗0）と基本設定（時間割・睡眠7h）に戻します。
+                        登録した予定や学習記録を消去し、標準の初期状態（基本4科目、学習時間0、予定0件、初期時間割・睡眠7h）に戻します。
                       </p>
                       <button
                         type="button"
                         onClick={() => {
-                          if (confirm('すべてのデータを消去し、初期デフォルト状態にリセットしますか？\n（科目・予定・学習履歴が初期化されます。この操作は取り消せません）')) {
+                          if (confirm('すべての予定や学習記録を消去し、データをデフォルト初期状態にリセットしますか？\n（この操作は取り消せません）')) {
                             onResetAllData('default');
                             setStatusMessage({
                               type: 'success',
@@ -702,61 +702,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             setTimeout(() => {
                               setStatusMessage(null);
                               onClose();
-                            }, 1200);
+                            }, 1000);
                           }
                         }}
-                        className="w-full py-2 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 hover:border-emerald-500 text-emerald-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                        className="w-full py-2.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
-                        デフォルトにリセット（消去初期化）
+                        データをデフォルト状態に戻す（消去リセット）
                       </button>
                     </div>
 
-                    {/* 2. すべてのデータを完全消去 */}
-                    <div className="p-3 rounded-xl bg-slate-900/80 border border-rose-900/50 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                          すべてのデータを完全消去（空にする）
-                        </div>
-                        <span className="text-[10px] text-rose-400 font-semibold">全消去</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 leading-normal">
-                        登録したすべての科目、カレンダー予定、学習履歴を完全に消去して空にします。一から自分で登録したい場合に便利です。
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm('本当にすべてのデータを完全に消去しますか？\n（すべての科目・予定・ログが消去され、空になります。この操作は取り消せません）')) {
-                            onResetAllData('clear_all');
-                            setStatusMessage({
-                              type: 'success',
-                              text: 'すべてのデータを完全消去しました。',
-                            });
-                            setTimeout(() => {
-                              setStatusMessage(null);
-                              onClose();
-                            }, 1200);
-                          }
-                        }}
-                        className="w-full py-2 px-3 rounded-lg bg-rose-900/40 hover:bg-rose-800 border border-rose-700/60 text-rose-200 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        すべてのデータを完全消去する
-                      </button>
-                    </div>
-
-                    {/* 3. 学習記録・実績のみ消去 */}
+                    {/* 2. 学習記録・実績ログのみ消去 */}
                     <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-700/80 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="text-xs font-bold text-white flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-amber-400" />
-                          学習記録・実績のみ消去（進捗を0クリア）
+                          学習記録・実績ログのみ消去（進捗を0クリア）
                         </div>
                         <span className="text-[10px] text-amber-400 font-semibold">ログ消去</span>
                       </div>
                       <p className="text-[10px] text-slate-400 leading-normal">
-                        作成した科目や予定はそのまま残し、誤入力した本日の学習時間やこれまでの消化実績ログのみを消去して0に戻します。
+                        作成した科目やカレンダー予定はそのまま残し、入力した学習時間や消化実績ログのみを消去して0に戻します。
                       </p>
                       <button
                         type="button"
@@ -770,7 +736,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             setTimeout(() => {
                               setStatusMessage(null);
                               onClose();
-                            }, 1200);
+                            }, 1000);
                           }
                         }}
                         className="w-full py-2 px-3 rounded-lg bg-amber-600/20 hover:bg-amber-600/80 border border-amber-500/40 hover:border-amber-500 text-amber-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
