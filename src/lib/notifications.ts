@@ -1,11 +1,57 @@
 import { StudyTask, DailyLog, StudyScheduleEvent, NotificationSettings } from '@/types/study';
 import { calculateTodayProgress, calculateDisposableTime, formatMinutesToHours, getTodayDateString, getUnitLabel } from './storage';
 
+export type NotificationPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'default'
+  | 'unsupported'
+  | 'ios_pwa_required';
+
+/**
+ * iOS端末（iPhone / iPad）か判定
+ */
+export const isIosDevice = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const ua = window.navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(ua) || (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+};
+
+/**
+ * ホーム画面から起動されたPWA（スタンドアロンモード）か判定
+ */
+export const isStandalonePwa = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches
+  );
+};
+
 /**
  * ブラウザが Notification API に対応しているか判定
  */
 export const isNotificationSupported = (): boolean => {
   return typeof window !== 'undefined' && 'Notification' in window;
+};
+
+/**
+ * 詳細な通知許可状態を取得
+ */
+export const getDetailedNotificationStatus = (): NotificationPermissionStatus => {
+  if (typeof window === 'undefined') return 'unsupported';
+
+  // iPhone / iPad の Safari の場合
+  if (isIosDevice() && !isStandalonePwa()) {
+    // iOS では「ホーム画面に追加」したPWAからのみWeb通知の許可が可能
+    return 'ios_pwa_required';
+  }
+
+  if (!isNotificationSupported()) {
+    return 'unsupported';
+  }
+
+  return Notification.permission;
 };
 
 /**
@@ -17,9 +63,34 @@ export const getNotificationPermission = (): NotificationPermission => {
 };
 
 /**
+ * Service Worker の登録
+ */
+export const registerServiceWorker = async () => {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
+  try {
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    return registration;
+  } catch (err) {
+    console.warn('Service Worker registration failed:', err);
+    return null;
+  }
+};
+
+/**
  * 通知許可をリクエスト
  */
 export const requestNotificationPermission = async (): Promise<NotificationPermission> => {
+  if (typeof window === 'undefined') return 'denied';
+
+  // Service Worker を登録しておく
+  if ('serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+    } catch (e) {
+      // 登録エラーは無視
+    }
+  }
+
   if (!isNotificationSupported()) return 'denied';
   try {
     const permission = await Notification.requestPermission();
@@ -70,12 +141,13 @@ export const playNotificationChime = () => {
 };
 
 /**
- * 安全にブラウザ通知を送信
+ * 安全にブラウザ通知を送信（Service Worker 優先 / fallback: new Notification）
  */
-export const sendBrowserNotification = (
+export const sendBrowserNotification = async (
   title: string,
   options?: NotificationOptions & { playSound?: boolean }
-): Notification | null => {
+): Promise<Notification | boolean | null> => {
+  if (typeof window === 'undefined') return null;
   if (!isNotificationSupported()) return null;
   if (Notification.permission !== 'granted') return null;
 
@@ -84,6 +156,24 @@ export const sendBrowserNotification = (
       playNotificationChime();
     }
 
+    // 1. Service Worker 経由の通知（iOS PWA やモダンブラウザで最も安定動作）
+    if ('serviceWorker' in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration && 'showNotification' in registration) {
+          await registration.showNotification(title, {
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            ...options,
+          });
+          return true;
+        }
+      } catch (swErr) {
+        console.warn('SW showNotification fallback:', swErr);
+      }
+    }
+
+    // 2. クラシックな Notification API
     const notification = new Notification(title, {
       icon: '/favicon.ico',
       badge: '/favicon.ico',

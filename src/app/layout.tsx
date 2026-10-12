@@ -4,6 +4,11 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Forest Study - 集中学習予定管理',
   description: 'Forestライクな円形インジケーターで学習ノルマと進捗をトラッキングする学習管理アプリ',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: '学習の要',
+  },
 };
 
 export default function RootLayout({

@@ -30,6 +30,8 @@ import {
   BellRing,
   Volume2,
   VolumeX,
+  Share2,
+  ExternalLink,
 } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { StudyTask, DailyLog, StudyScheduleEvent, TimetableSettings, NotificationSettings } from '@/types/study';
@@ -37,6 +39,9 @@ import { DEFAULT_TIMETABLE_SETTINGS, DEFAULT_SLEEP_HOURS, DEFAULT_NOTIFICATION_S
 import {
   isNotificationSupported,
   getNotificationPermission,
+  getDetailedNotificationStatus,
+  NotificationPermissionStatus,
+  isIosDevice,
   requestNotificationPermission,
   sendDailyQuotaNotification,
   getDailyQuotaSummary,
@@ -92,13 +97,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // 通知設定のローカル編集用ステート
   const [tempNotifications, setTempNotifications] = useState<NotificationSettings>(notificationSettings);
-  const [permissionState, setPermissionState] = useState<NotificationPermission>('default');
+  const [permissionState, setPermissionState] = useState<NotificationPermissionStatus>('default');
   const [isTestingNotification, setIsTestingNotification] = useState(false);
 
   // コンポーネント表示時に最新の通知許可状態を取得
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
-      setPermissionState(getNotificationPermission());
+      setPermissionState(getDetailedNotificationStatus());
     }
   }, [isOpen]);
 
@@ -112,7 +117,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // 通知権限の許可をブラウザにリクエスト
   const handleRequestPermission = async () => {
     const res = await requestNotificationPermission();
-    setPermissionState(res);
+    const detailed = getDetailedNotificationStatus();
+    setPermissionState(detailed);
     if (res === 'granted') {
       const updated = { ...tempNotifications, enabled: true };
       setTempNotifications(updated);
@@ -124,7 +130,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     } else if (res === 'denied') {
       setStatusMessage({
         type: 'error',
-        text: '通知がブロックされています。ブラウザのアドレスバーの鍵アイコンから通知を許可してください。',
+        text: isIosDevice()
+          ? '通知が許可されていません。iPhoneの「設定」アプリ ＞ 「通知」 ＞ 「学習の要」から通知を許可してください。'
+          : '通知がブロックされています。ブラウザのアドレスバーの鍵アイコンから通知を許可してください。',
       });
     }
   };
@@ -650,9 +658,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                         許可済み
                       </span>
+                    ) : permissionState === 'ios_pwa_required' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        ホーム画面追加が必要
+                      </span>
                     ) : permissionState === 'denied' ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
                         ブロック中
+                      </span>
+                    ) : permissionState === 'unsupported' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/20 text-slate-300 border border-slate-500/40">
+                        非対応ブラウザ
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
@@ -665,12 +681,71 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <p className="text-[11px] text-emerald-300/90">
                       ✓ ブラウザ通知が許可されています。定時リマインダーやタイマー完了通知が正常に届きます。
                     </p>
+                  ) : permissionState === 'ios_pwa_required' ? (
+                    <div className="space-y-2.5 pt-1">
+                      <div className="p-3 bg-amber-950/40 border border-amber-800/50 rounded-xl space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
+                          <Smartphone className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                          <span>iPhone (iOS) で通知を受け取る手順</span>
+                        </div>
+                        <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                          Apple（iOS）の仕様により、通常のSafariタブからはWeb通知が制限されています。
+                          <strong>「ホーム画面に追加」</strong>してアプリとして開くと通知を有効化できます。
+                        </p>
+                      </div>
+
+                      {/* 手順リスト */}
+                      <div className="p-3 bg-slate-900/90 border border-slate-700/80 rounded-xl space-y-2 text-[11px]">
+                        <div className="flex items-start gap-2">
+                          <span className="w-4 h-4 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                            1
+                          </span>
+                          <span className="text-slate-200">
+                            Safari画面下の <strong>共有ボタン</strong>（四角から上矢印 <Share2 className="inline w-3 h-3 text-emerald-400 mx-0.5" />）をタップ
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="w-4 h-4 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                            2
+                          </span>
+                          <span className="text-slate-200">
+                            メニューから <strong>「ホーム画面に追加」</strong> を選択して右上の「追加」をタップ
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="w-4 h-4 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                            3
+                          </span>
+                          <span className="text-slate-200">
+                            ホーム画面に追加された <strong>「学習の要」アプリアイコン</strong> をタップして起動
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="w-4 h-4 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                            4
+                          </span>
+                          <span className="text-slate-200">
+                            設定 ＞ 「通知」から <strong>「ブラウザ通知を許可する」</strong> をタップ！
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   ) : permissionState === 'denied' ? (
                     <div className="text-[11px] text-rose-300 space-y-1">
-                      <p>⚠️ 通知がブラウザによってブロックされています。</p>
-                      <p className="text-slate-400 text-[10px]">
-                        通知を受け取るには、ブラウザのURLアドレスバー左側の鍵アイコン（またはサイト設定）をクリックし、「通知」を「許可」に変更してください。
-                      </p>
+                      <p>⚠️ 通知がブロックされています。</p>
+                      {isIosDevice() ? (
+                        <p className="text-slate-300 text-[10px] leading-relaxed">
+                          iPhoneの <strong>「設定」アプリ ＞ 「通知」 ＞ 「学習の要（またはSafari）」</strong> を開き、「通知を許可」をONにしてください。
+                        </p>
+                      ) : (
+                        <p className="text-slate-400 text-[10px]">
+                          通知を受け取るには、ブラウザのURLアドレスバー左側の鍵アイコン（またはサイト設定）をクリックし、「通知」を「許可」に変更してください。
+                        </p>
+                      )}
+                    </div>
+                  ) : permissionState === 'unsupported' ? (
+                    <div className="text-[11px] text-slate-400">
+                      お使いのブラウザはWeb Notification APIに対応していません。Google ChromeやEdge、またはホーム画面に追加したiOSアプリでご利用ください。
                     </div>
                   ) : (
                     <div>

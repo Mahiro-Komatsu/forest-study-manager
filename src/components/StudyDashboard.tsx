@@ -56,6 +56,7 @@ import {
 import {
   sendDailyQuotaNotification,
   sendTimerFinishedNotification,
+  registerServiceWorker,
 } from '@/lib/notifications';
 import { fetchCloudData, saveCloudData, isSupabaseConfigured } from '@/lib/supabase';
 import { TimerCircle } from './TimerCircle';
@@ -180,6 +181,9 @@ export const StudyDashboard: React.FC = () => {
     if (loadedSyncCode) {
       syncFromCloud(loadedSyncCode);
     }
+
+    // Service Worker の登録（iOS PWA / Web Notifications 用）
+    registerServiceWorker();
   }, [syncFromCloud]);
 
   const handleUpdateTimetableSettings = (newSettings: TimetableSettings) => {
